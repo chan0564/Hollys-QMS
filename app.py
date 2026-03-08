@@ -65,7 +65,7 @@ def check_login():
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_pw")
             if st.button("로그인", use_container_width=True, type="primary"):
-                correct_pw = st.secrets.get("PASSWORD", "hollys!24124")
+                correct_pw = os.environ.get("PASSWORD") or st.secrets.get("PASSWORD", "hollys!24124")
                 if pw == correct_pw:
                     st.session_state.logged_in = True
                     st.rerun()
@@ -255,7 +255,7 @@ def load_ccp_decision(cat_id: str):
             for c in cols:
                 if c not in df.columns: df[c] = ""
             return df[cols]
-        except: pass
+        except Exception: pass
     return pd.DataFrame(columns=cols)
 
 def save_ccp_decision(cat_id: str, df):
@@ -268,7 +268,7 @@ def load_haccp_revisions():
     if os.path.exists(HACCP_REVISION_FILE):
         try: 
             return pd.read_csv(HACCP_REVISION_FILE, dtype=str)
-        except: pass
+        except Exception: pass
     df_rev = pd.DataFrame(columns=["개정일자", "분류", "문서명", "개정번호", "개정사유"])
     df_rev.to_csv(HACCP_REVISION_FILE, index=False, encoding='utf-8-sig')
     return df_rev
@@ -280,7 +280,7 @@ def load_flowchart():
     if os.path.exists(FLOW_FILE):
         try:
             return pd.read_csv(FLOW_FILE, dtype=str)
-        except:
+        except Exception:
             pass
     # 기본 샘플 데이터 (Hollys 커피 캡슐 기준)
     default_steps = [
@@ -305,7 +305,7 @@ def load_flow_categories():
     if os.path.exists(FLOW_CATEGORY_FILE):
         try:
             return pd.read_csv(FLOW_CATEGORY_FILE, dtype=str)
-        except:
+        except Exception:
             pass
     default_cats = pd.DataFrame([
         {"cat_id": "main", "cat_name": "메인 공정 (커피 원두)", "description": "핵심 제조 공정 흐름"},
@@ -321,7 +321,7 @@ def load_flowchart_by_cat(cat_id: str):
     if os.path.exists(fpath):
         try:
             return pd.read_csv(fpath, dtype=str)
-        except:
+        except Exception:
             pass
     # 기본 카테고리(main)는 샘플 데이터 자동 생성
     if cat_id == "main":
@@ -367,7 +367,7 @@ def load_data():
                     if col == "생산량": df[col] = 0
                     else: df[col] = ""
             return df[cols]
-        except: pass
+        except Exception: pass
     return pd.DataFrame(columns=cols)
 
 def load_specs():
@@ -377,7 +377,7 @@ def load_specs():
             if "제품코드" not in df.columns: df.insert(0, "제품코드", [f"P-{str(i+1).zfill(3)}" for i in range(len(df))])
             if "단위" not in df.columns: df.insert(3, "단위", "EA") 
             return df
-        except: pass
+        except Exception: pass
     return pd.DataFrame(columns=["제품코드", "제품명", "유형", "단위", "최소_질소", "최대_질소", "최소_수분", "최대_수분", "최소_색도", "최대_색도", "최소_추출", "최대_추출", "날짜유형"])
 
 def load_cleaning_specs():
@@ -396,7 +396,7 @@ def load_cleaning_specs():
                     elif col == '사용도구': df['사용도구'] = df.get('세제_도구', "")
                     else: df[col] = ""
             return df[req_cols]
-        except: pass
+        except Exception: pass
     df_clean = pd.DataFrame(columns=['ID', '대분류', '구역', '설비명', '부위', '세척소독방법', '주기', '사용도구', '책임자', '사진파일'])
     df_clean.to_csv(CLEAN_FILE, index=False, encoding='utf-8-sig')
     return df_clean
@@ -409,7 +409,7 @@ def load_filter_plan():
                 df.rename(columns={'설비명_위치': '설치장소', '필터종류': '필터명', '최근점검일': '점검일자', '차기점검일': '차기점검일자'}, inplace=True)
                 if '내용' not in df.columns: df['내용'] = '교체'
             if '설치장소' in df.columns: return df
-        except: pass
+        except Exception: pass
     df_f = pd.DataFrame(columns=["설치장소", "필터명", "내용", "주기_개월", "점검일자", "차기점검일자", "상태", "비고"])
     df_f.to_csv(FILTER_PLAN_FILE, index=False, encoding='utf-8-sig')
     return df_f
@@ -420,7 +420,7 @@ def load_verify():
             df = pd.read_csv(VERIFY_FILE)
             if '담당자' not in df.columns: df['담당자'] = ""
             if '계획일자' in df.columns: return df
-        except: pass
+        except Exception: pass
     df_v = pd.DataFrame(columns=["계획일자", "검증종류", "검증항목", "세부내용", "검증방법", "상태", "담당자"])
     df_v.to_csv(VERIFY_FILE, index=False, encoding='utf-8-sig')
     return df_v
@@ -431,7 +431,7 @@ def load_other_sched():
             df = pd.read_csv(OTHER_SCHED_FILE)
             if '담당자' not in df.columns: df['담당자'] = ""
             if '일자' in df.columns: return df
-        except: pass
+        except Exception: pass
     df_o = pd.DataFrame(columns=["일자", "일정명", "세부내용", "상태", "담당자"])
     df_o.to_csv(OTHER_SCHED_FILE, index=False, encoding='utf-8-sig')
     return df_o
@@ -441,7 +441,7 @@ def load_health_cert():
         try:
             df = pd.read_csv(HEALTH_CERT_FILE)
             if '검진일자' in df.columns: return df
-        except: pass
+        except Exception: pass
     df_hc = pd.DataFrame(columns=["직급", "이름", "연락처", "검진일자"])
     df_hc.to_csv(HEALTH_CERT_FILE, index=False, encoding='utf-8-sig')
     return df_hc
@@ -454,7 +454,7 @@ def load_employees():
             if '모니터링 CCP' not in df.columns: df['모니터링 CCP'] = ""
             if '기타' not in df.columns: df['기타'] = ""
             if '사번' in df.columns: return df
-        except: pass
+        except Exception: pass
     df_emp = pd.DataFrame(columns=["사번", "직급", "이름", "연락처", "입사일", "재직상태", "HACCP 직책", "모니터링 CCP", "기타"])
     df_emp.to_csv(EMPLOYEE_FILE, index=False, encoding='utf-8-sig')
     return df_emp
@@ -462,7 +462,7 @@ def load_employees():
 def load_facilities():
     if os.path.exists(FACILITY_FILE):
         try: return pd.read_csv(FACILITY_FILE, dtype=str)
-        except: pass
+        except Exception: pass
     df = pd.DataFrame(columns=["설비번호", "설비명", "사용용도", "전압", "구입년월", "제조회사명", "설치장소", "관리부서", "관리자_정", "관리자_부", "특이사항"])
     df.to_csv(FACILITY_FILE, index=False, encoding='utf-8-sig')
     return df
@@ -470,7 +470,7 @@ def load_facilities():
 def load_repairs():
     if os.path.exists(REPAIR_FILE):
         try: return pd.read_csv(REPAIR_FILE, dtype=str)
-        except: pass
+        except Exception: pass
     df = pd.DataFrame(columns=["설비번호", "수리일자", "수리사항", "수리처", "비고"])
     df.to_csv(REPAIR_FILE, index=False, encoding='utf-8-sig')
     return df
@@ -482,7 +482,7 @@ def load_annual_leave():
             for c in ["사번","이름","날짜","유형","비고"]:
                 if c not in df.columns: df[c] = ""
             return df[["사번","이름","날짜","유형","비고"]]
-        except: pass
+        except Exception: pass
     df = pd.DataFrame(columns=["사번","이름","날짜","유형","비고"])
     df.to_csv(ANNUAL_LEAVE_FILE, index=False, encoding="utf-8-sig")
     return df
@@ -505,7 +505,7 @@ def calc_annual_leave(hire_date_str, leave_records_df, emp_id, today=None):
 
     try:
         hire = pd.to_datetime(hire_date_str).date()
-    except:
+    except Exception:
         return 0, 0, 0, {}
 
     # 이 직원의 무급휴가/연차 사용 기록
@@ -584,13 +584,13 @@ def load_calib_list():
             df = pd.read_csv(CALIB_LIST_FILE, dtype=str)
             if "차기_검교정일자" not in df.columns: df["차기_검교정일자"] = ""
             return df
-        except: pass
+        except Exception: pass
     return pd.DataFrame(columns=["관리번호", "검사_설비명", "측정범위", "주기", "구분", "검교정일자", "차기_검교정일자", "비고"])
 
 def load_calib_reports():
     if os.path.exists(CALIB_REPORT_FILE):
         try: return pd.read_csv(CALIB_REPORT_FILE, dtype=str)
-        except: pass
+        except Exception: pass
     df = pd.DataFrame(columns=["설비명", "교정일자", "작성자", "검교정방법", "판정기준", "표준값", "측정값", "보정율/오차", "개선조치", "판정결과"])
     df.to_csv(CALIB_REPORT_FILE, index=False, encoding='utf-8-sig')
     return df
@@ -598,7 +598,7 @@ def load_calib_reports():
 def load_notices():
     if os.path.exists(NOTICE_BOARD_FILE):
         try: return pd.read_csv(NOTICE_BOARD_FILE)
-        except: pass
+        except Exception: pass
     df_n = pd.DataFrame(columns=["작성일", "작성자", "제목", "내용", "중요공지"])
     df_n.to_csv(NOTICE_BOARD_FILE, index=False, encoding='utf-8-sig')
     return df_n
@@ -606,7 +606,7 @@ def load_notices():
 def load_polls():
     if os.path.exists(POLL_BOARD_FILE):
         try: return pd.read_csv(POLL_BOARD_FILE)
-        except: pass
+        except Exception: pass
     df_p = pd.DataFrame(columns=["ID", "작성일", "제목", "선택지", "투표현황", "참여자"])
     df_p.to_csv(POLL_BOARD_FILE, index=False, encoding='utf-8-sig')
     return df_p
@@ -617,7 +617,7 @@ def toggle_task_status(file_path, idx):
         current_status = temp_df.loc[idx, '상태']
         temp_df.loc[idx, '상태'] = '예정' if current_status == '완료' else '완료'
         temp_df.to_csv(file_path, index=False, encoding='utf-8-sig')
-    except: pass
+    except Exception: pass
 
 df = load_data()
 df_specs = load_specs()
@@ -1094,7 +1094,7 @@ elif menu_selection == "캘린더":
                 status = str(r.get("상태", "예정"))
                 color = "#27AE60" if status == "완료" else "#4A90D9"
                 ev_map.setdefault(d, []).append((f"✅ {label}", color, "verify"))
-            except: pass
+            except Exception: pass
 
         for _, r in df_o.iterrows():
             try:
@@ -1103,7 +1103,7 @@ elif menu_selection == "캘린더":
                 status = str(r.get("상태", "예정"))
                 color = "#27AE60" if status == "완료" else "#F39C12"
                 ev_map.setdefault(d, []).append((f"🗓 {label}", color, "other"))
-            except: pass
+            except Exception: pass
 
         # ── 달력 HTML 생성 ──────────────────────────────────────
         import calendar as cal_mod
@@ -1419,7 +1419,7 @@ elif menu_selection == "제품 관리":
                     img_o = OI(img_path); img_o.width = 130
                     img_o.height = min(int(20 * (basic_end - basic_start + 1) * 1.33), 220)
                     ws.add_image(img_o, f"E{basic_start}")
-                except: pass
+                except Exception: pass
             cur += 1
             ws.merge_cells(f"A{cur}:F{cur}")
             ws[f"A{cur}"] = "■ 2. 배합비 (BOM)"; ws[f"A{cur}"].font = sfont
@@ -1811,7 +1811,7 @@ elif menu_selection == "제품 관리":
                             if ext_input.strip():
                                 for v in ext_input.replace(","," ").split():
                                     try: ext_times.append(float(v))
-                                    except: pass
+                                    except Exception: pass
                             ext_avg = str(round(sum(ext_times)/len(ext_times),2)) if ext_times else "N/A"
                             ext_detail_str = ", ".join([str(v) for v in ext_times]) if ext_times else ""
                             is_pass = True; fail_reason = []
@@ -2157,7 +2157,7 @@ elif menu_selection == "직원 관리":
             hire_dt = pd.to_datetime(hire_date).date()
             rd      = rdelta(today, hire_dt)
             tenure  = f"{rd.years}년 {rd.months}개월 {rd.days}일"
-        except:
+        except Exception:
             hire_dt = None
             tenure  = "입사일 정보 없음"
 
@@ -2773,7 +2773,7 @@ elif menu_selection == "설비 관리":
                         ws.merge_range('E7:F16', '', val_fmt)
                         if os.path.exists(img_path):
                             try: ws.insert_image('E7', img_path, {'x_offset': 5, 'y_offset': 5, 'object_position': 1, 'x_scale': 0.25, 'y_scale': 0.25})
-                            except: pass
+                            except Exception: pass
                         
                         for r in range(6, 16): ws.set_row(r, 22)
                         
@@ -3068,7 +3068,7 @@ elif menu_selection == "설비 관리":
                             
                     if real_img_path and os.path.exists(real_img_path):
                         try: ws.insert_image(r_idx, 7, real_img_path, {'x_offset': 5, 'y_offset': 5, 'x_scale': 0.12, 'y_scale': 0.12, 'positioning': 1})
-                        except: pass
+                        except Exception: pass
                         
                     ws.set_row(r_idx, 75)
                     r_idx += 1
@@ -3253,7 +3253,7 @@ elif menu_selection == "원·부자재 관리":
                 for c in RM_COLS:
                     if c not in df.columns: df[c] = ""
                 return df[RM_COLS]
-            except: pass
+            except Exception: pass
         return pd.DataFrame(columns=RM_COLS)
 
     def rm_spec_path(code, kind):
@@ -3404,7 +3404,7 @@ elif menu_selection == "원·부자재 관리":
             def load_rm_csv(fpath, cols):
                 if os.path.exists(fpath):
                     try: return pd.read_csv(fpath, dtype=str)
-                    except: pass
+                    except Exception: pass
                 return pd.DataFrame(columns=cols)
 
             df_basic   = load_rm_csv(RM_BASIC_F,  ["항목","내용"])
@@ -3575,7 +3575,7 @@ elif menu_selection == "원·부자재 관리":
                             row_h_px = 20 * (basic_end - basic_start + 1) * 1.33
                             img_o.width = 130; img_o.height = min(int(row_h_px), 200)
                             ws2.add_image(img_o, f"E{basic_start}")
-                        except: pass
+                        except Exception: pass
                     cur += 1
 
                     # ── 품질규격 ──
@@ -4837,7 +4837,7 @@ elif menu_selection == "HACCP":
                         try:
                             v = df_dec.iloc[edit_idx][col]
                             return str(v) if pd.notna(v) else ""
-                        except: pass
+                        except Exception: pass
                     return ""
 
                 # session_state 키 prefix (카테고리+편집idx 기반으로 충돌 방지)
@@ -5221,7 +5221,7 @@ elif menu_selection == "HACCP":
                     for c in ["유형","위해요소","심각성"]:
                         if c not in df.columns: df[c] = ""
                     return df
-                except: pass
+                except Exception: pass
             d = pd.DataFrame(columns=["유형","위해요소","심각성"])
             d.to_csv(SEVERITY_FILE, index=False, encoding='utf-8-sig')
             return d
@@ -5328,7 +5328,7 @@ elif menu_selection == "HACCP":
                     for c in ["카테고리","No","공정명","유형","위해요소","발생원인","심각성","발생가능성","종합평가","최종위해요소","예방조치및관리방법"]:
                         if c not in df.columns: df[c] = ""
                     return df
-                except: pass
+                except Exception: pass
             d = pd.DataFrame(columns=["카테고리","No","공정명","유형","위해요소","발생원인","심각성","발생가능성","종합평가","예방조치및관리방법"])
             d.to_csv(HAZARD_FILE, index=False, encoding='utf-8-sig')
             return d
@@ -5336,7 +5336,7 @@ elif menu_selection == "HACCP":
         def load_sev2():
             if os.path.exists(SEVERITY_FILE):
                 try: return pd.read_csv(SEVERITY_FILE, encoding='utf-8-sig')
-                except: pass
+                except Exception: pass
             return pd.DataFrame(columns=["유형","위해요소","심각성"])
 
         df_haz  = load_hazard()
@@ -5412,7 +5412,7 @@ elif menu_selection == "HACCP":
                                     tv = int(float(sev))*int(float(prob))
                                     total_v2 = str(tv)
                                     is_final = tv >= 3
-                            except: pass
+                            except Exception: pass
                             orig_idx2 = df_haz[mask_cat].index[ri] if ri < len(df_haz[mask_cat]) else None
                             rows_data.append({
                                 "ri":ri,"proc":proc,"typ":typ,"sev":sev,"prob":prob,
@@ -5635,7 +5635,7 @@ elif menu_selection == "HACCP":
                                     m2 = df_sev_fresh[df_sev_fresh["위해요소"]==hz_item]
                                     if not m2.empty:
                                         try: sev_val = str(int(m2.iloc[0]["심각성"]))
-                                        except: pass
+                                        except Exception: pass
                                 sev_c2 = "#C0392B" if sev_val=="3" else ("#E67E22" if sev_val=="2" else ("#27AE60" if sev_val=="1" else "#aaa"))
 
                                 # 기존 항목이면 기본 체크, 발생가능성도 기존값
@@ -5692,7 +5692,7 @@ elif menu_selection == "HACCP":
                                         total_v2 = ""; is_fin2 = False
                                         try:
                                             tv2 = int(sv)*int(pv); total_v2=str(tv2); is_fin2=tv2>=3
-                                        except: pass
+                                        except Exception: pass
                                         new_rows.append({
                                             "카테고리": sel_cat_name,
                                             "No": no_v2, "공정명": cur_proc,
@@ -5740,11 +5740,11 @@ elif menu_selection == "HACCP":
                                     sv = srow[2] if len(srow)>2 else None
                                     if nm and sv is not None:
                                         try: sev_map_imp[nm] = int(sv)
-                                        except: pass
+                                        except Exception: pass
                             if not sev_map_imp and not df_sev_fresh.empty:
                                 for _, sr in df_sev_fresh.iterrows():
                                     try: sev_map_imp[str(sr["위해요소"])] = int(sr["심각성"])
-                                    except: pass
+                                    except Exception: pass
 
                             # ── 형식 자동 감지 ──
                             # 헤더 행 읽기
@@ -5778,7 +5778,7 @@ elif menu_selection == "HACCP":
                                     try:
                                         if auto_sev_i and prob_str:
                                             tv2=int(auto_sev_i)*int(prob_str); total_i=str(tv2); is_fin_i=tv2>3
-                                    except: pass
+                                    except Exception: pass
                                     parsed.append({
                                         "카테고리": sel_cat_name, "No": proc_no_map.get(proc_i,""),
                                         "공정명": proc_i, "유형": type_i, "위해요소": hz_i,
@@ -5807,7 +5807,7 @@ elif menu_selection == "HACCP":
                                     try:
                                         if auto_sev_i and prob_str:
                                             tv2=int(auto_sev_i)*int(prob_str); total_i=str(tv2); is_fin_i=tv2>3
-                                    except: pass
+                                    except Exception: pass
                                     parsed.append({
                                         "카테고리": sel_cat_name, "No": cur_no_i, "공정명": cur_proc_i,
                                         "유형": cur_type_i, "위해요소": hz_i,
@@ -5910,7 +5910,7 @@ elif menu_selection == "HACCP":
                                 total_v_xl = str(dr.get("종합평가",""))
                                 is_final_xl = False
                                 try: is_final_xl = int(float(total_v_xl)) > 3 if total_v_xl not in ["","None","nan"] else False
-                                except: pass
+                                except Exception: pass
                                 final_row_bg = "D6E8FF" if is_final_xl else bg2
                                 final_txt_bg = "D6E8FF" if is_final_xl else "FAFAFA"
 
@@ -5967,7 +5967,7 @@ elif menu_selection == "HACCP":
                     for c in cols:
                         if c not in df.columns: df[c] = ""
                     return df
-                except: pass
+                except Exception: pass
             d = pd.DataFrame(columns=cols)
             d.to_csv(_RM_HAZ_FILE, index=False, encoding='utf-8-sig')
             return d
@@ -5981,13 +5981,13 @@ elif menu_selection == "HACCP":
                     for c in RM_COLS2:
                         if c not in df.columns: df[c] = ""
                     return df[RM_COLS2]
-                except: pass
+                except Exception: pass
             return pd.DataFrame(columns=RM_COLS2)
 
         def load_sev_rm():
             if os.path.exists(_SEVERITY_FILE):
                 try: return pd.read_csv(_SEVERITY_FILE, encoding='utf-8-sig')
-                except: pass
+                except Exception: pass
             return pd.DataFrame(columns=["유형","위해요소","심각성"])
 
         df_rm_haz  = load_rm_hazard()
@@ -6034,7 +6034,7 @@ elif menu_selection == "HACCP":
                             if sev and prob and sev not in ["","None","nan"] and prob not in ["","None","nan"]:
                                 tv = int(float(sev)) * int(float(prob))
                                 total_v2 = str(tv); is_final = tv >= 3
-                        except: pass
+                        except Exception: pass
                         rows_data.append({
                             "ri":ri,"rm_nm":rm_nm,"typ":typ,"sev":sev,"prob":prob,
                             "hz":hz,"cause":cause,"prev":prev,
@@ -6272,7 +6272,7 @@ elif menu_selection == "HACCP":
                                     m2 = df_sev_fresh_rm[df_sev_fresh_rm["위해요소"]==hz_item]
                                     if not m2.empty:
                                         try: sev_val_rm = str(int(m2.iloc[0]["심각성"]))
-                                        except: pass
+                                        except Exception: pass
                                 sev_c2 = "#C0392B" if sev_val_rm=="3" else ("#E67E22" if sev_val_rm=="2" else ("#27AE60" if sev_val_rm=="1" else "#aaa"))
                                 default_chk_rm = True if (is_existing_rm or all_checked_rm) else False
                                 default_prob_v = int(already_map_rm[hz_item]) if is_existing_rm and already_map_rm[hz_item].isdigit() else 1
@@ -6321,7 +6321,7 @@ elif menu_selection == "HACCP":
                                         total_v2 = ""; is_fin2 = False
                                         try:
                                             tv2 = int(sv)*int(pv); total_v2=str(tv2); is_fin2=tv2>=3
-                                        except: pass
+                                        except Exception: pass
                                         new_rows_rm.append({
                                             "원자재명": sel_rm_name,
                                             "원자재코드": sel_rm_code,
@@ -6412,7 +6412,7 @@ elif menu_selection == "HACCP":
                             total_r = str(dr.get("종합평가",""))
                             is_fin_r = False
                             try: is_fin_r = int(float(total_r)) >= 3 if total_r not in ["","None","nan"] else False
-                            except: pass
+                            except Exception: pass
                             fin_bg = "D6E8FF" if is_fin_r else bg_r
 
                             wc_r(row_r,1,show_nm,bold=(show_nm!=""),bg="D6E4F0" if show_nm else fin_bg,h="left")
