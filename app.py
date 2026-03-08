@@ -21,6 +21,59 @@ if not os.path.exists('.streamlit/config.toml'):
 # ==========================================
 st.set_page_config(page_title="Hollys QMS Premium", layout="wide", initial_sidebar_state="expanded")
 
+# ==========================================
+# 로그인 기능
+# ==========================================
+def check_login():
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+
+    if not st.session_state.logged_in:
+        # 로그인 화면
+        st.markdown("""
+        <style>
+        .login-wrap {
+            max-width: 420px;
+            margin: 80px auto;
+            background: white;
+            border-radius: 16px;
+            padding: 48px 40px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+            text-align: center;
+        }
+        .login-logo {
+            color: #D11031;
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        .login-sub {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 32px;
+        }
+        </style>
+        <div class="login-wrap">
+            <div class="login-logo">HOLLYS</div>
+            <div class="login-sub">Roasting Center QMS</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+            pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_pw")
+            if st.button("로그인", use_container_width=True, type="primary"):
+                if pw == "hollys!24124":
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("비밀번호가 올바르지 않습니다.")
+        st.stop()
+
+check_login()
+
 # [수정] 표를 가려버리던 악성 CSS 요소 제거 및 깔끔한 원복
 st.markdown("""
     <style>
