@@ -65,7 +65,8 @@ def check_login():
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_pw")
             if st.button("로그인", use_container_width=True, type="primary"):
-                if pw == "hollys!24124":
+                correct_pw = st.secrets.get("PASSWORD", "hollys!24124")
+                if pw == correct_pw:
                     st.session_state.logged_in = True
                     st.rerun()
                 else:
