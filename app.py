@@ -24,56 +24,62 @@ st.set_page_config(page_title="Hollys QMS Premium", layout="wide", initial_sideb
 # ==========================================
 # 로그인 기능
 # ==========================================
-def check_login():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+# def check_login():
+#     if "logged_in" not in st.session_state:
+#         st.session_state.logged_in = False
 
-    if not st.session_state.logged_in:
-        # 로그인 화면
-        st.markdown("""
-        <style>
-        .login-wrap {
-            max-width: 420px;
-            margin: 80px auto;
-            background: white;
-            border-radius: 16px;
-            padding: 48px 40px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-            text-align: center;
-        }
-        .login-logo {
-            color: #D11031;
-            font-size: 36px;
-            font-weight: 900;
-            letter-spacing: 2px;
-            margin-bottom: 6px;
-        }
-        .login-sub {
-            color: #888;
-            font-size: 13px;
-            margin-bottom: 32px;
-        }
-        </style>
-        <div class="login-wrap">
-            <div class="login-logo">HOLLYS</div>
-            <div class="login-sub">Roasting Center QMS</div>
-        </div>
-        """, unsafe_allow_html=True)
+#     if not st.session_state.logged_in:
+#         # 로그인 화면
+#         st.markdown("""
+#         <style>
+#         .login-wrap {
+#             max-width: 420px;
+#             margin: 80px auto;
+#             background: white;
+#             border-radius: 16px;
+#             padding: 48px 40px;
+#             box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+#             text-align: center;
+#         }
+#         .login-logo {
+#             color: #D11031;
+#             font-size: 36px;
+#             font-weight: 900;
+#             letter-spacing: 2px;
+#             margin-bottom: 6px;
+#         }
+#         .login-sub {
+#             color: #888;
+#             font-size: 13px;
+#             margin-bottom: 32px;
+#         }
+#         </style>
+#         <div class="login-wrap">
+#             <div class="login-logo">HOLLYS</div>
+#             <div class="login-sub">Roasting Center QMS</div>
+#         </div>
+#         """, unsafe_allow_html=True)
 
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-            pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_pw")
-            if st.button("로그인", use_container_width=True, type="primary"):
-                correct_pw = os.environ.get("PASSWORD") or st.secrets.get("PASSWORD", "hollys!24124")
-                if pw == correct_pw:
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else:
-                    st.error("비밀번호가 올바르지 않습니다.")
-        st.stop()
+#         col1, col2, col3 = st.columns([1, 2, 1])
+#         with col2:
+#             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+#             pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_pw")
+#             if st.button("로그인", use_container_width=True, type="primary"):
+#                 # 에러가 나지 않도록 try-except 문으로 안전하게 감싸줍니다.
+#                 try:
+#                     correct_pw = st.secrets["PASSWORD"]
+#                 except:
+#                     correct_pw = "hollys!24124" # Secrets가 없으면 기본 비밀번호 적용
+                
+#                 if pw == correct_pw:
+#                     st.session_state.logged_in = True
+#                     st.rerun()
+#                 else:
+#                     st.error("비밀번호가 올바르지 않습니다.")
+#         st.stop()
 
-check_login()
+# check_login()
+st.session_state.logged_in = True  # 임시 로그인 상태 유지
 
 # [수정] 표를 가려버리던 악성 CSS 요소 제거 및 깔끔한 원복
 st.markdown("""
@@ -240,6 +246,30 @@ HAZARD_FILE      = "hazard_analysis.csv"
 RM_HAZARD_FILE   = "rm_hazard_analysis.csv"  # 원부자재 위해요소분석
 RM_FILE          = "raw_materials.csv"        # 원·부자재 등록
 RM_SPEC_DIR      = "rm_specs"                 # 원·부자재 규격서 디렉토리
+OUTBOUND_FILE    = "outbound_records.csv"     # 출고 기록 데이터
+INVENTORY_ADJ_FILE = "inventory_adj.csv"      # 재고 임의 조정 로그
+HISTORY_LOG_FILE = "history_log.csv"          # 시스템 작업 히스토리 로그
+
+def log_history(action, target, detail=""):
+    """작성 일시, 작업자(세션 정보), 대상 메뉴/기능, 작업 내용, 세부 사항을 CSV에 기록"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    worker = st.session_state.get("worker_name", "시스템/관리자")
+    
+    new_entry = pd.DataFrame([{
+        "일시": now,
+        "작업자": worker,
+        "대상": target,
+        "작업내용": action,
+        "상세": detail
+    }])
+    
+    if os.path.exists(HISTORY_LOG_FILE):
+        try:
+            new_entry.to_csv(HISTORY_LOG_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
+        except:
+            pass
+    else:
+        new_entry.to_csv(HISTORY_LOG_FILE, index=False, encoding='utf-8-sig')
 
 def load_ccp_decision(cat_id: str):
     os.makedirs(CCP_DECISION_DIR, exist_ok=True)
@@ -263,6 +293,7 @@ def save_ccp_decision(cat_id: str, df):
     safe_id = str(cat_id).replace("/","_").replace("\\","_").replace(" ","_")
     fpath = os.path.join(CCP_DECISION_DIR, f"ccp_decision_{safe_id}.csv")
     df.to_csv(fpath, index=False, encoding="utf-8-sig")
+    log_history("CCP 결정도 업데이트", f"공정: {cat_id}", f"데이터 {len(df)}건 저장")
 
 def load_haccp_revisions():
     if os.path.exists(HACCP_REVISION_FILE):
@@ -299,6 +330,7 @@ def load_flowchart():
     ]
     df_flow = pd.DataFrame(default_steps)
     df_flow.to_csv(FLOW_FILE, index=False, encoding="utf-8-sig")
+    log_history("기본 공정 흐름도 생성", "HACCP 공정 흐름도", "최초 샘플 데이터 생성")
     return df_flow
 def load_flow_categories():
     """공정 흐름도 카테고리(제품군/라인) 목록 로드"""
@@ -358,10 +390,12 @@ CLEAN_CATEGORIES = [
 ]
 
 def load_data():
-    cols = ["생산일", "유형", "제품명", "생산량", "단위", "질소(%)", "수분(%)", "색도(Agtron)", "추출시간(sec)", "추출시간_상세", "날짜기록", "판정", "비고"]
+    cols = ["생산일", "유형", "제품명", "생산량", "규격", "질소(%)", "수분(%)", "색도(Agtron)", "추출시간(sec)", "추출시간_상세", "날짜기록", "판정", "비고"]
     if os.path.exists(DATA_FILE): 
         try: 
             df = pd.read_csv(DATA_FILE)
+            if "단위" in df.columns and "규격" not in df.columns:
+                df = df.rename(columns={"단위": "규격"})
             for col in cols:
                 if col not in df.columns:
                     if col == "생산량": df[col] = 0
@@ -370,15 +404,38 @@ def load_data():
         except Exception: pass
     return pd.DataFrame(columns=cols)
 
+def load_outbound_records():
+    """출고 기록 데이터 로드"""
+    cols = ["출고일", "출고시간", "차량번호", "기사명", "출하처", "유형", "제품명", "규격", "수량", "비고"]
+    if os.path.exists(OUTBOUND_FILE):
+        try:
+            df = pd.read_csv(OUTBOUND_FILE, dtype=str)
+            for c in cols:
+                if c not in df.columns: df[c] = ""
+            return df[cols]
+        except Exception: pass
+    return pd.DataFrame(columns=cols)
+
+def load_inventory_adj():
+    cols = ["조정일시", "유형", "제품명", "규격", "기존재고", "변경재고", "방향", "차이", "사유"]
+    if os.path.exists(INVENTORY_ADJ_FILE):
+        try: return pd.read_csv(INVENTORY_ADJ_FILE, dtype=str)
+        except Exception: pass
+    return pd.DataFrame(columns=cols)
+
 def load_specs():
     if os.path.exists(SPEC_FILE): 
         try:
             df = pd.read_csv(SPEC_FILE, dtype=str)
             if "제품코드" not in df.columns: df.insert(0, "제품코드", [f"P-{str(i+1).zfill(3)}" for i in range(len(df))])
-            if "단위" not in df.columns: df.insert(3, "단위", "EA") 
+            if "규격" not in df.columns:
+                if "단위" in df.columns:
+                    df = df.rename(columns={"단위": "규격"})
+                else:
+                    df.insert(3, "규격", "EA") 
             return df
         except Exception: pass
-    return pd.DataFrame(columns=["제품코드", "제품명", "유형", "단위", "최소_질소", "최대_질소", "최소_수분", "최대_수분", "최소_색도", "최대_색도", "최소_추출", "최대_추출", "날짜유형"])
+    return pd.DataFrame(columns=["제품코드", "제품명", "유형", "규격", "최소_질소", "최대_질소", "최소_수분", "최대_수분", "최소_색도", "최대_색도", "최소_추출", "최대_추출", "날짜유형"])
 
 def load_cleaning_specs():
     if os.path.exists(CLEAN_FILE): 
@@ -404,7 +461,7 @@ def load_cleaning_specs():
 def load_filter_plan():
     if os.path.exists(FILTER_PLAN_FILE):
         try:
-            df = pd.read_csv(FILTER_PLAN_FILE)
+            df = pd.read_csv(FILTER_PLAN_FILE, dtype=str).fillna("")
             if '설비명_위치' in df.columns:
                 df.rename(columns={'설비명_위치': '설치장소', '필터종류': '필터명', '최근점검일': '점검일자', '차기점검일': '차기점검일자'}, inplace=True)
                 if '내용' not in df.columns: df['내용'] = '교체'
@@ -634,10 +691,46 @@ if 'is_edit_mode' not in st.session_state:
 # ==========================================
 with st.sidebar:
     st.markdown("## 메인 메뉴")
+    
+    # --- 사이드바 상단 데이터 연결성 요약 ---
+    df_p_count = load_specs(); df_rm_count = pd.read_csv(RM_FILE) if os.path.exists(RM_FILE) else pd.DataFrame()
+    df_emp_raw = load_employees()
+    # 재직 중인 직원 중 직급별 카운트
+    if not df_emp_raw.empty and "재직상태" in df_emp_raw.columns:
+        active_emp = df_emp_raw[df_emp_raw["재직상태"] == "재직"]
+    else:
+        active_emp = df_emp_raw
+
+    f_count = active_emp[active_emp['직급'].isin(['팀장', '매니저', '선임매니저'])].shape[0] if not active_emp.empty else 0
+    p_count = active_emp[active_emp['직급'] == '파트타이머'].shape[0] if not active_emp.empty else 0
+    
+    st.markdown(f"""
+    <div style='background:white; padding:15px; border-radius:12px; border-left:5px solid #D11031; margin-bottom:20px; box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <div style='font-size:13px; font-weight:600; color:#555; margin-bottom:12px;'>📊 품질 데이터 연결 현황</div>
+        <div style='display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;'>
+            <div style='text-align:center; padding:8px; background:#FDF2F4; border-radius:8px;'>
+                <div style='font-size:20px; font-weight:bold; color:#D11031;'>{len(df_p_count)}</div>
+                <div style='font-size:11px; color:#666; font-weight:500;'>제품 규격</div>
+            </div>
+            <div style='text-align:center; padding:8px; background:#F0F7FF; border-radius:8px;'>
+                <div style='font-size:20px; font-weight:bold; color:#2E75B6;'>{len(df_rm_count)}</div>
+                <div style='font-size:11px; color:#666; font-weight:500;'>원부자재</div>
+            </div>
+            <div style='text-align:center; padding:8px; background:#F1F9F4; border-radius:8px;'>
+                <div style='font-size:20px; font-weight:bold; color:#217346;'>{f_count}</div>
+                <div style='font-size:11px; color:#666; font-weight:500;'>정직원</div>
+            </div>
+            <div style='text-align:center; padding:8px; background:#F7F4FD; border-radius:8px;'>
+                <div style='font-size:20px; font-weight:bold; color:#7B5EA7;'>{p_count}</div>
+                <div style='font-size:11px; color:#666; font-weight:500;'>PT</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     menu_selection = st.radio(
         "이동할 메뉴를 선택하세요:",
-        ["대시보드 (메인)", "게시판", "캘린더", "제품 관리", "원·부자재 관리", "직원 관리", "설비 관리", "HACCP"]
+        ["대시보드 (메인)", "게시판", "캘린더", "제품 관리", "원·부자재 관리", "재고 관리", "출고 관리", "직원 관리", "설비 관리", "HACCP", "시스템 히스토리"]
     )
 
     sub_menu = None
@@ -660,6 +753,16 @@ with st.sidebar:
         st.divider()
         st.markdown("#### 원·부자재 관리")
         sub_menu = st.radio("하위 메뉴 선택:", ["원·부자재 등록", "원·부자재 규격서 마스터"])
+
+    elif menu_selection == "재고 관리":
+        st.divider()
+        st.markdown("#### 📦 재고 관리")
+        sub_menu = st.radio("하위 메뉴 선택:", ["현재고 현황 및 조정"])
+
+    elif menu_selection == "출고 관리":
+        st.divider()
+        st.markdown("#### 🚚 출고 관리")
+        sub_menu = st.radio("하위 메뉴 선택:", ["출고등록"])
 
     elif menu_selection == "설비 관리":
         st.divider()
@@ -789,19 +892,19 @@ if menu_selection == "대시보드 (메인)":
                 # 👇 [🔥연동 포인트] 제품 규격(Specs) 마스터 데이터를 불러와서 매핑 딕셔너리 생성
                 df_specs_dash = load_specs()
                 if not df_specs_dash.empty and '제품명' in df_specs_dash.columns:
-                    unit_mapping = df_specs_dash.set_index('제품명')['단위'].to_dict()
+                    unit_mapping = df_specs_dash.set_index('제품명')['규격'].to_dict()
                 else:
                     unit_mapping = {}
                 
                 dash_filtered['유형'] = dash_filtered['유형'].fillna("-").astype(str)
                 dash_filtered['제품명'] = dash_filtered['제품명'].fillna("-").astype(str)
                 
-                # 👇 대시보드에 표시할 때 제품명 기준으로 최신 '단위'를 찾아 덮어쓰기! (없으면 기존 데이터 유지)
-                dash_filtered['단위'] = dash_filtered['제품명'].map(unit_mapping).fillna(dash_filtered['단위']).fillna("-").astype(str)
+                # 👇 대시보드에 표시할 때 제품명 기준으로 최신 '규격'을 찾아 덮어쓰기! (없으면 기존 데이터 유지)
+                dash_filtered['규격'] = dash_filtered['제품명'].map(unit_mapping).fillna(dash_filtered['규격']).fillna("-").astype(str)
                 dash_filtered['생산량'] = pd.to_numeric(dash_filtered['생산량'], errors='coerce').fillna(0)
                 
                 # 제품별 생산량 합계 계산
-                prod_summary = dash_filtered.groupby(['유형', '제품명', '단위'])['생산량'].sum().reset_index()
+                prod_summary = dash_filtered.groupby(['유형', '제품명', '규격'])['생산량'].sum().reset_index()
                 
                 # 대시보드에는 생산량이 0 초과인(실제 생산한) 제품만 깔끔하게 보여주기
                 prod_summary = prod_summary[prod_summary['생산량'] > 0]
@@ -814,6 +917,60 @@ if menu_selection == "대시보드 (메인)":
                 st.info("해당 일자에 기록된 생산 내역이 없습니다.")
         else:
             st.info("데이터 히스토리에 저장된 생산 기록이 없습니다.")
+            
+        st.markdown('<div class="section-title">📦 전체 실시간 재고 요약 (대시보드)</div>', unsafe_allow_html=True)
+        # 위에서 사용된 `df` (전체 QC Data) 변수를 그대로 활용하거나 로드
+        df_out_dash = load_outbound_records()
+        df_adj_dash = load_inventory_adj()
+        
+        # 전체 재고 집계 로직
+        inv_dict_dash = {}
+        for _, row in df.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            k = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if k not in inv_dict_dash: inv_dict_dash[k] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: qty = int(float(str(row.get("생산량", "0")).replace(",","")))
+            except: qty = 0
+            inv_dict_dash[k]["총생산량"] += qty
+            
+        for _, row in df_out_dash.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            k = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if k not in inv_dict_dash: inv_dict_dash[k] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: qty = int(float(str(row.get("수량", "0")).replace(",","")))
+            except: qty = 0
+            inv_dict_dash[k]["총출고량"] += qty
+            
+        for _, row in df_adj_dash.iterrows():
+            k = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if k not in inv_dict_dash: inv_dict_dash[k] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
+            except: diff = 0
+            inv_dict_dash[k]["조정수량"] += diff
+            
+        inv_list_dash = []
+        for k, v in inv_dict_dash.items():
+            curr_qty = v["총생산량"] - v["총출고량"] + v["조정수량"]
+            # 대시보드에서는 재고가 0이 아닌 유의미한 품목만 노출 (또는 전체 노출)
+            if curr_qty > 0 or v["총생산량"] > 0:
+                inv_list_dash.append({
+                    "제품명": f"[{k[0]}] {k[1]}",
+                    "규격": k[2] if k[2] not in ["", "nan"] else "-",
+                    "현재고": curr_qty
+                })
+        
+        if not inv_list_dash:
+            st.info("현재 파악된 품목의 전산 재고가 없습니다.")
+        else:
+            df_dash_inv = pd.DataFrame(inv_list_dash).sort_values(by="제품명").reset_index(drop=True)
+            st.dataframe(
+                df_dash_inv,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "현재고": st.column_config.NumberColumn(format="%d 개")
+                }
+            )
 
     with c_right:
         st.markdown('<div class="section-title">다가오는 캘린더 일정 (D-Day 연동)</div>', unsafe_allow_html=True)
@@ -996,6 +1153,7 @@ elif menu_selection == "게시판":
                         })
                         df_notices = pd.concat([df_notices, new_notice], ignore_index=True)
                         df_notices.to_csv(NOTICE_BOARD_FILE, index=False, encoding='utf-8-sig')
+                        log_history("게시글 등록", "사내 게시판", f"제목: {n_title}")
                         st.success("게시글이 성공적으로 등록되었습니다!")
                         st.rerun()
                     else:
@@ -1020,6 +1178,7 @@ elif menu_selection == "게시판":
             if st.button("게시판 변경사항 저장"):
                 edited_notices['작성일'] = edited_notices['작성일'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else "")
                 edited_notices.to_csv(NOTICE_BOARD_FILE, index=False, encoding='utf-8-sig')
+                log_history("게시판 일괄 수정", "사내 게시판", "데이터 에디터를 통한 수정")
                 st.success("게시판 내용이 안전하게 업데이트 되었습니다.")
                 st.rerun()
 
@@ -1047,6 +1206,7 @@ elif menu_selection == "게시판":
                             new_p = pd.DataFrame([[new_id, str(date.today()), p_title, p_opts, initial_counts, ""]], columns=df_polls.columns)
                             df_polls = pd.concat([df_polls, new_p], ignore_index=True)
                             df_polls.to_csv(POLL_BOARD_FILE, index=False, encoding='utf-8-sig')
+                            log_history("투표 등록", "사내 투표", f"주제: {p_title}")
                             st.success("투표가 등록되었습니다! 메인 대시보드에서 투표에 참여할 수 있습니다.")
                             st.rerun()
                         else:
@@ -1281,7 +1441,7 @@ elif menu_selection == "제품 관리":
                     new_p_code = st.text_input("제품코드 (예: HL-001)")
                     new_p_name = st.text_input("제품명 (예: 시그니처 캡슐)")
                     new_p_type = st.selectbox("유형", ["캡슐커피", "스틱커피", "원두커피", "생두(원료)"])
-                    new_p_unit = st.selectbox("단위", ["EA", "KG", "BOX", "g"])
+                    new_p_spec = st.text_input("규격 (여러 개 입력 시 콤마로 구분)", placeholder="예: 100g, 200g, 1kg")
                     date_type  = st.selectbox("날짜 관리", ["해당없음", "소비기한", "제조일자"])
                 with s_c2:
                     analysis_items = st.multiselect("📌 분석 항목 설정",
@@ -1299,9 +1459,12 @@ elif menu_selection == "제품 관리":
                         min_ext = st.number_input("추출시간 최소 (초)", value=22.0) if "추출시간" in analysis_items else None
                         max_ext = st.number_input("추출시간 최대 (초)", value=28.0) if "추출시간" in analysis_items else None
                 if st.form_submit_button("제품 등록"):
-                    if new_p_code and new_p_name:
-                        new_spec = pd.DataFrame([[
-                            new_p_code, new_p_name, new_p_type, new_p_unit,
+                    if new_p_code and new_p_name and new_p_spec:
+                        # 규격을 쉼표로 구분된 하나의 문자열로 저장
+                        clean_specs = ", ".join([s.strip() for s in new_p_spec.split(",") if s.strip()])
+                        
+                        new_row = pd.DataFrame([[
+                            new_p_code, new_p_name, new_p_type, clean_specs,
                             min_n2  if min_n2  is not None else "N/A",
                             max_n2  if max_n2  is not None else "N/A",
                             min_moi if min_moi is not None else "N/A",
@@ -1312,29 +1475,59 @@ elif menu_selection == "제품 관리":
                             max_ext if max_ext is not None else "N/A",
                             date_type
                         ]], columns=df_specs.columns)
-                        df_specs = pd.concat([df_specs, new_spec], ignore_index=True)
+                        
+                        # 동일 코드가 이미 있다면 업데이트, 없으면 추가
+                        if new_p_code in df_specs["제품코드"].values:
+                            df_specs = df_specs[df_specs["제품코드"] != new_p_code]
+                        
+                        df_specs = pd.concat([df_specs, new_row], ignore_index=True)
                         df_specs.to_csv(SPEC_FILE, index=False, encoding='utf-8-sig')
+                        log_history("제품 신규 등록", "제품 관리", f"제품코드: {new_p_code}, 제품명: {new_p_name}, 규격: {clean_specs}")
                         st.success(f"[{new_p_code}] {new_p_name} 등록 완료!"); st.rerun()
                     else:
-                        st.error("제품코드와 제품명을 모두 입력해 주세요.")
+                        st.error("제품코드, 제품명, 규격을 모두 입력해 주세요.")
 
         st.write("")
         if df_specs.empty:
             st.info("등록된 제품이 없습니다.")
         else:
+            # 표시용 그룹화 (이미 데이터상에 분리된 경우가 있을 수 있으므로 코드 기준 병합)
+            df_display = df_specs.drop_duplicates(subset=["제품코드"]).copy()
+            
             rows_html = ""
-            for _, row in df_specs.iterrows():
+            for _, row in df_display.iterrows():
+                p_code = row.get("제품코드","")
+                # 같은 코드의 원본 행들에서 규격만 추출하여 합침
+                all_specs = df_specs[df_specs["제품코드"] == p_code]["규격"].tolist()
+                combined_specs = []
+                for s in all_specs:
+                    combined_specs.extend([item.strip() for item in str(s).split(",") if item.strip()])
+                combined_specs = sorted(list(set(combined_specs))) # 중복 제거 및 정렬
+                
+                spec_count = len(combined_specs)
+                if spec_count > 1:
+                    spec_cell = (
+                        f'<details style="cursor:pointer; font-size:11px;">'
+                        f'<summary style="color:#1A5FAD; font-weight:600;">{combined_specs[0]} 외 {spec_count-1}건</summary>'
+                        f'<ul style="margin:5px 0 0 15px; padding:0; list-style-type:circle; color:#666;">'
+                        + "".join([f"<li>{s}</li>" for s in combined_specs]) +
+                        f'</ul></details>'
+                    )
+                else:
+                    spec_cell = combined_specs[0] if combined_specs else "-"
+
                 tc = TYPE_COLOR.get(str(row.get("유형","")), "#555")
                 def rng(mn_k, mx_k, r=row):
                     mv, xv = str(r.get(mn_k,"")), str(r.get(mx_k,""))
                     if mv in ("","N/A","nan") and xv in ("","N/A","nan"): return '<span style="color:#bbb;">-</span>'
                     return f'{mv} ~ {xv}'
+                
                 rows_html += (
                     f'<tr>'
-                    f'<td style="{TD_P}font-weight:bold;color:#D11031;">{row.get("제품코드","")}</td>'
+                    f'<td style="{TD_P} font-weight:bold;color:#D11031;">{p_code}</td>'
                     f'<td style="{TD_P}text-align:left;font-weight:bold;">{row.get("제품명","")}</td>'
                     f'<td style="{TD_P}"><span style="background:{tc}22;color:{tc};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;">{row.get("유형","")}</span></td>'
-                    f'<td style="{TD_P}">{row.get("단위","")}</td>'
+                    f'<td style="{TD_P}">{spec_cell}</td>'
                     f'<td style="{TD_P}">{rng("최소_질소","최대_질소")}</td>'
                     f'<td style="{TD_P}">{rng("최소_수분","최대_수분")}</td>'
                     f'<td style="{TD_P}">{rng("최소_색도","최대_색도")}</td>'
@@ -1343,7 +1536,7 @@ elif menu_selection == "제품 관리":
                     f'</tr>'
                 )
             head_cells = ""
-            for h, w in [("코드","70px"),("제품명","160px"),("유형","80px"),("단위","50px"),
+            for h, w in [("코드","70px"),("제품명","160px"),("유형","80px"),("규격","50px"),
                          ("질소(%)","90px"),("수분(%)","90px"),("색도","90px"),("추출시간(초)","100px"),("날짜관리","70px")]:
                 head_cells += f'<th style="{TH_P}width:{w};">{h}</th>'
             html_sp = (
@@ -1357,6 +1550,7 @@ elif menu_selection == "제품 관리":
                 edited_specs = st.data_editor(df_specs, num_rows="dynamic", use_container_width=True)
                 if st.button("제품 규격 저장", type="primary"):
                     edited_specs.to_csv(SPEC_FILE, index=False, encoding='utf-8-sig')
+                    log_history("제품 규격 일괄 수정", "제품 관리", "데이터 에디터를 통한 수정")
                     st.success("제품 규격이 안전하게 저장되었습니다."); st.rerun()
 
     # ════════════════════════════════════════════════════════
@@ -1484,7 +1678,7 @@ elif menu_selection == "제품 관리":
                                     unsafe_allow_html=True)
                                 st.markdown(f"<h5 style='color:#D11031;margin:4px 0 0;'>{p_code}</h5>", unsafe_allow_html=True)
                                 st.markdown(f"**{p_name}**")
-                                if st.button("상세 규격 열기 📝", key=f"btn_{p_code}", use_container_width=True):
+                                if st.button("상세 규격 열기 📝", key=f"btn_{p_code}_{idx}", use_container_width=True):
                                     st.session_state.selected_pcode = p_code
                                     st.session_state.selected_pname = p_name
                                     st.session_state.is_edit_mode = False
@@ -1684,9 +1878,13 @@ elif menu_selection == "제품 관리":
                 st.error("제품을 선택해 주세요.")
             else:
                 sr = df_specs[df_specs["제품명"] == add_prod].iloc[0]
+                # 등록된 규격 리스트 중 첫 번째를 기본값으로 사용
+                prod_specs = [s.strip() for s in str(sr.get("규격","")).split(",") if s.strip()]
+                default_spec = prod_specs[0] if prod_specs else ""
+                
                 new_row = {
                     "생산일": selected_date, "유형": str(sr.get("유형","")),
-                    "제품명": add_prod, "생산량": 0, "단위": str(sr.get("단위","")),
+                    "제품명": add_prod, "생산량": 0, "규격": default_spec,
                     "질소(%)": None, "수분(%)": None, "색도(Agtron)": None,
                     "추출시간(sec)": None, "추출시간_상세": None,
                     "날짜기록": None, "판정": None, "비고": ""
@@ -1698,7 +1896,7 @@ elif menu_selection == "제품 관리":
         st.divider()
         mask        = df['생산일'] == selected_date
         filtered_df = df[mask].copy().reset_index()
-        filtered_df['단위'] = filtered_df['단위'].fillna("").astype(str).replace("nan","")
+        filtered_df['규격'] = filtered_df['규격'].fillna("").astype(str).replace("nan","")
         filtered_df['비고'] = filtered_df['비고'].fillna("").astype(str).replace("nan","")
         rec_count = len(filtered_df)
         st.markdown(f"**{selected_date} 기록** — 총 {rec_count}건")
@@ -1715,8 +1913,8 @@ elif menu_selection == "제품 관리":
                 f"height:38px{_css_imp}; font-size:11px{_css_imp}; padding:4px 6px{_css_imp}; }}"
                 f"</style>",
                 unsafe_allow_html=True)
-            COLS = [0.3, 1.0, 0.8, 2.0, 0.9, 0.7, 0.7, 0.7, 0.8, 1.0, 0.7, 1.0, 1.0, 0.6]
-            HDR  = ["#","생산일","유형","제품명","생산량","단위","질소(%)","수분(%)","색도","추출시간","판정","비고","측정기록","삭제"]
+            COLS = [0.3, 1.0, 0.8, 2.0, 0.9, 1.2, 0.7, 0.7, 0.8, 1.0, 0.7, 1.0, 1.0, 0.6]
+            HDR  = ["#","생산일","유형","제품명","생산량","규격","질소(%)","수분(%)","색도","추출시간","판정","비고","측정기록","삭제"]
             hdr_cols = st.columns(COLS)
             for hc, ht in zip(hdr_cols, HDR):
                 hc.markdown(f"<div style='background:#1F4E79;color:white;padding:6px 2px;font-size:11px;font-weight:bold;text-align:center;border-radius:3px;margin-bottom:2px;'>{ht}</div>", unsafe_allow_html=True)
@@ -1744,7 +1942,22 @@ elif menu_selection == "제품 관리":
                 try: qty_val = int(float(str(qty_val)))
                 except: qty_val = 0
                 new_qty  = rc[4].number_input("", value=qty_val, min_value=0, step=1, key=f"qty_{ri}_{orig_idx}", label_visibility="collapsed")
-                new_unit = rc[5].text_input("", value=str(frow.get("단위","")).replace("nan",""), key=f"unit_{ri}_{orig_idx}", label_visibility="collapsed")
+                
+                # 제품 규격 연동 selectbox
+                cur_prod_specs_str = ""
+                if not df_specs.empty and pname in df_specs["제품명"].values:
+                    cur_prod_specs_str = str(df_specs[df_specs["제품명"] == pname].iloc[0].get("규격", ""))
+                
+                cur_specs_list = [s.strip() for s in cur_prod_specs_str.split(",") if s.strip()]
+                if not cur_specs_list: cur_specs_list = ["-"]
+                
+                cur_spec_val = str(frow.get("규격","")).replace("nan","").strip()
+                try: 
+                    def_spec_idx = cur_specs_list.index(cur_spec_val) if cur_spec_val in cur_specs_list else 0
+                except: 
+                    def_spec_idx = 0
+                
+                new_spec = rc[5].selectbox("", cur_specs_list, index=def_spec_idx, key=f"spec_{ri}_{orig_idx}", label_visibility="collapsed")
                 for ci2, col_key in enumerate(["질소(%)","수분(%)","색도(Agtron)","추출시간(sec)"]):
                     v = str(frow.get(col_key,""))
                     v = "" if v in ["None","nan"] else v
@@ -1771,7 +1984,7 @@ elif menu_selection == "제품 관리":
                         st.session_state["hist_meas_prod"] = ""; st.rerun()
                     if dc2.button("취소", key=f"del_cancel_{orig_idx}"):
                         st.session_state.pop(f"del_confirm_{orig_idx}", None); st.rerun()
-                edited_rows.append({**{c: frow.get(c) for c in df.columns}, "생산량": new_qty, "단위": new_unit, "비고": new_note})
+                edited_rows.append({**{c: frow.get(c) for c in df.columns}, "생산량": new_qty, "규격": new_spec, "비고": new_note})
             edited_filtered_df = pd.DataFrame(edited_rows)
             if st.button(f"{selected_date} 저장", type="primary"):
                 df = df[~mask]
@@ -2837,18 +3050,27 @@ elif menu_selection == "설비 관리":
                     flt_loc = st.text_input("설치장소 (예: 로스팅룸, 1층)")
                     flt_type = st.text_input("필터명 (예: 카본필터, 헤파필터)")
                 with f2:
-                    flt_content = st.selectbox("내용", ["교체", "세척"])
-                    flt_cycle = st.number_input("주기 (개월)", min_value=1, step=1, value=6)
+                    flt_content = st.selectbox("점검 종류", ["교체", "세척", "점검"])
+                    flt_cycle_opt = st.selectbox("점검 주기", ["직접 입력(개월)", "파손시"])
+                    if flt_cycle_opt == "직접 입력(개월)":
+                        flt_cycle = st.number_input("주기 (개월)", min_value=1, step=1, value=6)
+                    else:
+                        flt_cycle = "파손시"
                 with f3:
-                    flt_date = st.date_input("점검일자")
+                    flt_date = st.date_input("최종 점검일자")
                     flt_note = st.text_input("비고 (특이사항)")
 
                 if st.form_submit_button("필터 등록하기"):
                     if flt_loc and flt_type:
-                        next_date = flt_date + pd.DateOffset(months=flt_cycle)
-                        new_df = pd.DataFrame([[flt_loc, flt_type, flt_content, flt_cycle, str(flt_date), str(next_date.date()), "예정", flt_note]], columns=df_filter.columns)
+                        if flt_cycle == "파손시":
+                            next_date_str = "파손시"
+                        else:
+                            next_date_str = str((flt_date + pd.DateOffset(months=int(flt_cycle))).date())
+                        
+                        new_df = pd.DataFrame([[flt_loc, flt_type, flt_content, str(flt_cycle), str(flt_date), next_date_str, "예정", flt_note]], columns=df_filter.columns)
                         df_filter = pd.concat([df_filter, new_df], ignore_index=True)
                         df_filter.to_csv(FILTER_PLAN_FILE, index=False, encoding='utf-8-sig')
+                        log_history("필터 점검 항목 등록", "설비 관리", f"장소: {flt_loc}, 필터: {flt_type}")
                         st.success("필터 등록 완료! 대시보드 캘린더에 연동되었습니다.")
                         st.rerun()
                     else:
@@ -2856,24 +3078,34 @@ elif menu_selection == "설비 관리":
 
         view_df_filter = df_filter.copy()
         view_df_filter['점검일자'] = pd.to_datetime(view_df_filter['점검일자'], errors='coerce')
-        view_df_filter['주기_개월'] = pd.to_numeric(view_df_filter['주기_개월'], errors='coerce')
+        # [수정] 주기_개월을 숫자로 강제 변환하면 '파손시'가 유실되므로 문자열로 유지
+        view_df_filter['주기_개월'] = view_df_filter['주기_개월'].astype(str).replace("nan", "").replace("None", "")
 
         def calc_next_filter(row):
             if pd.notna(row['점검일자']) and pd.notna(row['주기_개월']):
-                try: return row['점검일자'] + pd.DateOffset(months=int(row['주기_개월']))
+                try:
+                    if str(row['주기_개월']) == "파손시":
+                        return "파손시"
+                    return row['점검일자'] + pd.DateOffset(months=int(float(row['주기_개월'])))
                 except: return pd.NaT
             return pd.NaT
 
         view_df_filter['차기점검일자'] = view_df_filter.apply(calc_next_filter, axis=1)
 
-        view_df_filter['점검일자'] = view_df_filter['점검일자'].apply(lambda x: x.date() if pd.notna(x) else None)
-        view_df_filter['차기점검일자'] = view_df_filter['차기점검일자'].apply(lambda x: x.date() if pd.notna(x) else None)
+        # UI 표시를 위해 날짜 객체로 변환 (파손시는 문자열 그대로 유지됨)
+        def to_date_safe(val):
+            if isinstance(val, (date, datetime, pd.Timestamp)):
+                return val.date()
+            return val
+
+        view_df_filter['점검일자'] = view_df_filter['점검일자'].apply(to_date_safe)
+        view_df_filter['차기점검일자'] = view_df_filter['차기점검일자'].apply(to_date_safe)
 
         cfg_filter = {
-            "내용": st.column_config.SelectboxColumn("내용", options=["교체", "세척"]),
-            "점검일자": st.column_config.DateColumn("점검일자", format="YYYY-MM-DD"),
-            "차기점검일자": st.column_config.DateColumn("차기점검일자 (자동)", format="YYYY-MM-DD", disabled=True),
-            "주기_개월": st.column_config.NumberColumn("주기 (개월)", min_value=1, step=1, format="%d"),
+            "내용": st.column_config.SelectboxColumn("점검 종류", options=["교체", "세척", "점검"]),
+            "점검일자": st.column_config.DateColumn("최종 점검일자", format="YYYY-MM-DD"),
+            "차기점검일자": st.column_config.Column("차기 점검일자 (자동)", disabled=True),
+            "주기_개월": st.column_config.TextColumn("주기 (개월)", help="'파손시' 또는 숫자 입력"),
             "상태": st.column_config.SelectboxColumn("상태", options=["예정", "완료"])
         }
 
@@ -2935,12 +3167,15 @@ elif menu_selection == "설비 관리":
         with c_filt1:
             if st.button("필터 점검표 저장 및 업데이트"):
                 edited_filter['점검일자'] = pd.to_datetime(edited_filter['점검일자'], errors='coerce')
-                edited_filter['주기_개월'] = pd.to_numeric(edited_filter['주기_개월'], errors='coerce')
-                edited_filter['차기점검일자'] = edited_filter.apply(calc_next_filter, axis=1)
+                
+                def apply_next_calc(row):
+                    res = calc_next_filter(row)
+                    if isinstance(res, (date, datetime, pd.Timestamp)):
+                        return res.strftime('%Y-%m-%d')
+                    return str(res) if res else ""
 
+                edited_filter['차기점검일자'] = edited_filter.apply(apply_next_calc, axis=1)
                 edited_filter['점검일자'] = edited_filter['점검일자'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else "")
-                edited_filter['차기점검일자'] = edited_filter['차기점검일자'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else "")
-                edited_filter['주기_개월'] = edited_filter['주기_개월'].apply(lambda x: str(int(x)) if pd.notna(x) else "")
 
                 edited_filter.to_csv(FILTER_PLAN_FILE, index=False, encoding='utf-8-sig')
                 st.success("성공적으로 저장 및 차기 점검일이 갱신되었습니다.")
@@ -3244,12 +3479,14 @@ elif menu_selection == "설비 관리":
 elif menu_selection == "원·부자재 관리":
 
     # ── 파일 로드 헬퍼 ──────────────────────────────────────
-    RM_COLS = ["원자재코드","원자재명","유형","포장단위","원산지","제조원","판매원","검사주기","비고",
+    RM_COLS = ["원자재코드","원자재명","유형","규격","원산지","제조원","판매원","검사주기","비고",
                "최소_수분","최대_수분","최소_밀도","최대_밀도","관능_기준"]
     def load_rm():
         if os.path.exists(RM_FILE):
             try:
                 df = pd.read_csv(RM_FILE, dtype=str)
+                if "포장단위" in df.columns and "규격" not in df.columns:
+                    df = df.rename(columns={"포장단위": "규격"})
                 for c in RM_COLS:
                     if c not in df.columns: df[c] = ""
                 return df[RM_COLS]
@@ -3279,7 +3516,7 @@ elif menu_selection == "원·부자재 관리":
                     rm_name = st.text_input("원자재명 *",   placeholder="예: 커피콩_에티오피아")
                     rm_type = st.selectbox("유형", ["생두(원료)","스틱(원료)","포장재","부자재","첨가물","기타"])
                 with r2:
-                    rm_unit    = st.text_input("포장단위",  placeholder="예: 60kg")
+                    rm_unit    = st.text_input("규격",  placeholder="예: 60kg")
                     rm_origin  = st.text_input("원산지",    placeholder="예: 에티오피아")
                     rm_maker   = st.text_input("제조원",    placeholder="예: -")
                     rm_seller  = st.text_input("판매원",    placeholder="예: ㈜케이지할리스에프앤비")
@@ -3322,7 +3559,7 @@ elif menu_selection == "원·부자재 관리":
   <th style="{TH}width:80px;">코드</th>
   <th style="{TH}width:150px;">원자재명</th>
   <th style="{TH}width:70px;">유형</th>
-  <th style="{TH}width:70px;">포장단위</th>
+  <th style="{TH}width:70px;">규격</th>
   <th style="{TH}width:80px;">원산지</th>
   <th style="{TH}width:70px;">검사주기</th>
   <th style="{TH}width:100px;">수분(%)</th>
@@ -3336,7 +3573,7 @@ elif menu_selection == "원·부자재 관리":
   <td style="{TD}font-weight:bold;color:#D11031;">{row["원자재코드"]}</td>
   <td style="{TD}text-align:left;font-weight:bold;">{row["원자재명"]}</td>
   <td style="{TD}">{row["유형"]}</td>
-  <td style="{TD}">{row["포장단위"]}</td>
+  <td style="{TD}">{row["규격"]}</td>
   <td style="{TD}">{row["원산지"]}</td>
   <td style="{TD}">{row["검사주기"]}</td>
   <td style="{TD}">{moi_str}</td>
@@ -3417,7 +3654,7 @@ elif menu_selection == "원·부자재 관리":
                 r0 = rm_row.iloc[0]
                 df_basic = pd.DataFrame([
                     ["유형",            r0.get("유형","")],
-                    ["포장단위",        r0.get("포장단위","")],
+                    ["포장단위",        r0.get("규격","")],
                     ["원산지",          r0.get("원산지","")],
                     ["포장재질",        ""],
                     ["제조원",          r0.get("제조원","")],
@@ -3746,6 +3983,407 @@ elif menu_selection == "원·부자재 관리":
                 else:
                     st.info("등록된 사진이 없습니다.")
 
+
+# --- 재고 관리 메뉴 ---
+elif menu_selection == "재고 관리":
+    if sub_menu == "현재고 현황 및 조정":
+        st.markdown('<div class="section-title">📦 제품별 실시간 재고 현황 (영점 조정)</div>', unsafe_allow_html=True)
+        st.write("데이터 히스토리에 입력된 `생산량`과 출고 관리에 등록된 `출고량`이 자동 합산되어 현재고가 실시간으로 노출됩니다.")
+        
+        df_data = load_data()
+        df_out = load_outbound_records()
+        df_adj = load_inventory_adj()
+        
+        inv_dict = {}
+        # 1. 생산량 누적
+        for _, row in df_data.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: qty = int(float(str(row.get("생산량", "0")).replace(",","")))
+            except: qty = 0
+            inv_dict[key]["총생산량"] += qty
+            
+        # 2. 출고량 차감
+        for _, row in df_out.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: qty = int(float(str(row.get("수량", "0")).replace(",","")))
+            except: qty = 0
+            inv_dict[key]["총출고량"] += qty
+            
+        # 3. 누적 임의 조정치 적용
+        for _, row in df_adj.iterrows():
+            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
+            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
+            try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
+            except: diff = 0
+            inv_dict[key]["조정수량"] += diff
+            
+        inv_list = []
+        for k, v in inv_dict.items():
+            curr_qty = v["총생산량"] - v["총출고량"] + v["조정수량"]
+            inv_list.append({
+                "유형": k[0] if k[0] not in ["", "nan"] else "-",
+                "제품명": k[1],
+                "규격": k[2] if k[2] not in ["", "nan"] else "-",
+                "총생산량": v["총생산량"],
+                "총출고량": v["총출고량"],
+                "임의조정 누적분": v["조정수량"],
+                "현재고 (P)": curr_qty
+            })
+            
+        df_inv = pd.DataFrame(inv_list)
+        if df_inv.empty:
+            st.info("재고를 산정할 데이터(생산 또는 출고량)가 존재하지 않습니다.")
+        else:
+            df_inv = df_inv.sort_values(by=["유형", "제품명"]).reset_index(drop=True)
+            st.dataframe(
+                df_inv, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "총생산량": st.column_config.NumberColumn(format="%d"),
+                    "총출고량": st.column_config.NumberColumn(format="%d"),
+                    "임의조정 누적분": st.column_config.NumberColumn(format="%d"),
+                    "현재고 (P)": st.column_config.NumberColumn("현재고 (최종)", format="%d", help="생산량 - 출고량 + 임의조정 누적분")
+                }
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### 🚨 재고 강제 영점 / 수정 패널")
+            st.error("주의사항: 전산 기록상 재고와 실제 물류창고 재고가 일치하지 않을 때, 전산상 숫자를 수정합니다. 관리자의 명백한 확인 후에만 사용 바랍니다.")
+            
+            with st.form("adj_inv_form", clear_on_submit=True):
+                options = df_inv.apply(lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) — 전산재고: {r['현재고 (P)']}", axis=1).tolist()
+                sel_item = st.selectbox("조정(수정)할 품목 지정", ["선택해주세요"] + options)
+                
+                c0, c1, c2 = st.columns([1,1,2])
+                with c1:
+                    actual_qty = st.number_input("조정 후 최종 실제재고 입력", min_value=0, step=1, value=0)
+                with c2:
+                    adj_reason = st.text_input("조정 사유", placeholder="예: 재고실사 불일치 (파손 2건), 누락 등")
+                
+                confirm_check = st.checkbox("해당 데이터 위변조/수정에 동의하며, 위 사유로 재고를 수정하겠습니다.")
+                submitted = st.form_submit_button("🔁 현재고 즉시 수정(저장)")
+                
+                if submitted:
+                    if sel_item == "선택해주세요":
+                        st.error("조정 폼목을 올바르게 선택해주세요.")
+                    elif not adj_reason.strip():
+                        st.error("비고/사유는 필수 입력 사항입니다.")
+                    elif not confirm_check:
+                        st.error("재고 수정 사항에 동의함 체커에 체크해주셔야 수정이 가능합니다.")
+                    else:
+                        match_idx = options.index(sel_item)
+                        target_row = df_inv.iloc[match_idx]
+                        old_qty = target_row["현재고 (P)"]
+                        
+                        if actual_qty == old_qty:
+                            st.info("입력하신 수량과 이미 계산된 전산 재고가 같습니다. 별도 수정이 필요 없습니다.")
+                        else:
+                            diff = actual_qty - old_qty
+                            dir_str = "증가▲" if diff > 0 else "감소▼"
+                            
+                            new_adj = {
+                                "조정일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "유형": target_row["유형"],
+                                "제품명": target_row["제품명"],
+                                "규격": target_row["규격"],
+                                "기존재고": old_qty,
+                                "변경재고": actual_qty,
+                                "방향": dir_str,
+                                "차이": diff,
+                                "사유": adj_reason
+                            }
+                            df_adj = pd.concat([df_adj, pd.DataFrame([new_adj])], ignore_index=True)
+                            df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                            
+                            log_history("재고 수동조정", "재고 관리", f"{target_row['제품명']} 수량수정( {old_qty} ➔ {actual_qty} ) 사유: {adj_reason}")
+                            st.success(f"경고: {target_row['제품명']} 제품의 전산 재고가 강제 {dir_str} 조정되었습니다!")
+                            st.rerun()
+
+            with st.expander("📝 누적 재고 조정 히스토리 보기"):
+                if df_adj.empty:
+                    st.info("로딩된 임의조정 내역이 없습니다.")
+                else:
+                    st.dataframe(df_adj.sort_values(by="조정일시", ascending=False), use_container_width=True, hide_index=True)
+
+# --- 출고 관리 메뉴 ---
+elif menu_selection == "출고 관리":
+    if sub_menu == "출고등록":
+        st.markdown('<div class="section-title">🚚 출고 등록 및 배차 관리</div>', unsafe_allow_html=True)
+        st.write("차량별 출고 내역을 등록합니다. 여러 제품을 한 번에 입력하여 효율적으로 관리할 수 있습니다.")
+
+        df_out = load_outbound_records()
+        df_p_list = load_specs()
+        
+        # 제품 목록 준비
+        if df_p_list.empty:
+            st.warning("등록된 제품이 없습니다. 제품 관리 메뉴에서 먼저 제품을 등록해주세요.")
+            p_names = []
+        else:
+            p_names = df_p_list['제품명'].dropna().unique().tolist()
+            
+        if "outbound_row_count" not in st.session_state:
+            st.session_state.outbound_row_count = 1
+
+        # 1. 출고 등록 섹션
+        with st.expander("➕ 새 출고 배차 등록", expanded=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                out_date = st.date_input("출고일자", value=date.today())
+                out_time = st.time_input("출고시간", value=datetime.today().time()).strftime("%H:%M")
+            with c2:
+                out_dest = st.text_input("출하처 *", placeholder="예: 물류센터 / 대리점 등")
+            
+            st.write("---")
+            
+            # 상단 제목 영역에 제품 라인 추가 및 삭제 버튼 배치
+            col_add1, col_add2, col_add3 = st.columns([1, 2, 2])
+            with col_add1:
+                st.markdown("**📦 출하 제품 및 수량**")
+            with col_add2:
+                if st.button("➕ 품목 1줄 추가", key="btn_add_ob_row"):
+                    st.session_state.outbound_row_count += 1
+                    st.rerun()
+            with col_add3:
+                if st.session_state.outbound_row_count > 1:
+                    if st.button("➖ 맨 밑줄 삭제", key="btn_del_ob_row"):
+                        st.session_state.outbound_row_count -= 1
+                        st.rerun()
+
+            out_items = []
+            for i in range(st.session_state.outbound_row_count):
+                ic0, ic1, ic2, ic3, ic4 = st.columns([2, 3, 2, 2, 2])
+                with ic0:
+                    type_opts = ["선택 안함"] + (df_p_list['유형'].dropna().unique().tolist() if not df_p_list.empty else [])
+                    sel_t = st.selectbox(f"유형 ({i+1})", type_opts, key=f"ob_t_{i}")
+                with ic1:
+                    if sel_t != "선택 안함" and not df_p_list.empty:
+                        p_opts = df_p_list[df_p_list['유형'] == sel_t]['제품명'].dropna().unique().tolist()
+                    else:
+                        p_opts = p_names
+                    sel_p = st.selectbox(f"제품명 ({i+1})", ["선택 안함"] + p_opts, key=f"ob_p_{i}")
+                with ic2:
+                    if sel_p != "선택 안함" and not df_p_list.empty:
+                        u_opts = df_p_list[df_p_list['제품명'] == sel_p]['규격'].dropna().unique().tolist()
+                        
+                        # 자동 유형 선택 보완 (제품 선택시 유형이 '선택 안함'이었을 경우 역추적)
+                        if sel_t == "선택 안함":
+                            guess_t = df_p_list[df_p_list['제품명'] == sel_p]['유형'].dropna().tolist()
+                            if guess_t:
+                                sel_t = guess_t[0]
+                    else:
+                        u_opts = []
+                    
+                    if u_opts:
+                        sel_u = st.selectbox(f"규격 ({i+1})", u_opts, key=f"ob_u_{i}")
+                    else:
+                        sel_u = st.text_input(f"규격 직접입력 ({i+1})", key=f"ob_u_{i}")
+                        
+                with ic3:
+                    qty = st.number_input(f"수량 ({i+1})", min_value=0, step=1, key=f"ob_q_{i}")
+                with ic4:
+                    note = st.text_input(f"비고 ({i+1})", key=f"ob_n_{i}")
+                
+                if sel_p != "선택 안함" and str(sel_p).strip() != "" and qty > 0:
+                    out_items.append({
+                        "유형": sel_t if sel_t != "선택 안함" else "-",
+                        "제품명": sel_p,
+                        "규격": sel_u,
+                        "수량": str(qty),
+                        "비고": note
+                    })
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🚀 출고 데이터 일괄 등록", type="primary", use_container_width=True):
+                if not out_dest:
+                    st.error("출하처는 필수 입력 사항입니다.")
+                elif not out_items:
+                    st.error("최소 하나 이상의 제품과 수량(0 초과)을 입력해야 합니다.")
+                else:
+                    new_rows = []
+                    for item in out_items:
+                        new_rows.append([
+                            str(out_date), out_time, "", "", out_dest,
+                            item["유형"], item["제품명"], item["규격"], item["수량"], item["비고"]
+                        ])
+                    
+                    header_cols = ["출고일", "출고시간", "차량번호", "기사명", "출하처", "유형", "제품명", "규격", "수량", "비고"]
+                    new_df = pd.DataFrame(new_rows, columns=header_cols)
+                    
+                    df_out = pd.concat([df_out, new_df], ignore_index=True)
+                    df_out.to_csv(OUTBOUND_FILE, index=False, encoding='utf-8-sig')
+                    
+                    log_history("출고 등록", "출고 관리", f"출하처: {out_dest}, 제품 {len(new_rows)}건 등록")
+                    st.success(f"총 {len(new_rows)}건의 출고 내역이 등록되었습니다.")
+                    st.session_state.outbound_row_count = 1  # 폼 초기화
+                    st.rerun()
+
+        # 2. 조회 및 엑셀 출력 섹션
+        st.markdown("### 📋 출고 내역 조회 및 엑셀 출력")
+
+        view_c1, view_c2 = st.columns([1, 2])
+        with view_c1:
+            search_date = st.date_input("조회 기준일", value=date.today())
+            
+        if df_out.empty:
+            st.info("등록된 출고 내역이 없습니다.")
+        else:
+            df_filtered = df_out[df_out["출고일"] == str(search_date)]
+            
+            if df_filtered.empty:
+                st.warning(f"{search_date} 일자의 출고 내역이 없습니다.")
+            else:
+                # 당일 전체 / 개별 배차(차량) 모드 선택
+                view_mode = st.radio("조회 모드 선택", ["당일 전체 출고조회", "개별 배차별(차량별) 조회"], horizontal=True)
+                
+                # 콤보박스나 필터 설정
+                target_df = None
+                file_name_prefix = ""
+                doc_title = ""
+                
+                if view_mode == "당일 전체 출고조회":
+                    target_df = df_filtered.copy()
+                    file_name_prefix = f"Hollys_Outbound_Total_{search_date.strftime('%Y%m%d')}"
+                    doc_title = f"출고 관리 대장 ({search_date})"
+                else:
+                    # 개별 배차 선택 (출고시간, 출하처 기준)
+                    배차목록 = df_filtered.apply(lambda r: f"[{r['출고시간']}] {r['출하처']}", axis=1).unique().tolist()
+                    if 배차목록:
+                        sel_배차 = st.selectbox("배차 내역 선택", 배차목록)
+                        분리 = sel_배차.split("] ")
+                        s_time = 분리[0].replace("[", "")
+                        s_dest = 분리[1].strip()
+                        
+                        target_df = df_filtered[
+                            (df_filtered["출고시간"] == s_time) & 
+                            (df_filtered["출하처"] == s_dest)
+                        ]
+                        file_name_prefix = f"Hollys_Outbound_Car_{search_date.strftime('%Y%m%d')}_{s_time.replace(':','')}"
+                        doc_title = f"출고 명세서"
+
+                if target_df is not None and not target_df.empty:
+                    st.markdown(f"**검색 결과: {len(target_df)}건**")
+                    
+                    def get_excel_data(df_view, doc_title_str, mode):
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                            wb = writer.book
+                            ws = wb.add_worksheet('출고내역')
+                            
+                            title_fmt = wb.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#DDEBF7'})
+                            header_fmt = wb.add_format({'bold': True, 'border': 1, 'align': 'center', 'bg_color': '#F2F2F2'})
+                            data_fmt = wb.add_format({'border': 1, 'align': 'center'})
+                            num_fmt = wb.add_format({'border': 1, 'align': 'right', 'num_format': '#,##0'})
+                            text_left_fmt = wb.add_format({'align': 'left', 'valign': 'vcenter', 'font_size': 11})
+                            text_bold_fmt = wb.add_format({'align': 'left', 'valign': 'vcenter', 'bold': True, 'font_size': 12})
+                            
+                            if mode == "당일 전체 출고조회":
+                                ws.merge_range('A1:J2', doc_title_str, title_fmt)
+                                headers = ["출고일", "출고시간", "차량번호", "기사명", "출하처", "유형", "제품명", "규격", "수량", "비고"]
+                                for i, h in enumerate(headers):
+                                    ws.write(3, i, h, header_fmt)
+                                    
+                                ws.set_column('A:B', 12); ws.set_column('C:F', 15); ws.set_column('G:G', 25); ws.set_column('H:J', 15)
+                                
+                                for ri, (_, row) in enumerate(df_view.iterrows(), 4):
+                                    ws.write(ri, 0, str(row["출고일"]), data_fmt)
+                                    ws.write(ri, 1, str(row["출고시간"]), data_fmt)
+                                    ws.write(ri, 2, str(row.get("차량번호", "")), data_fmt)
+                                    ws.write(ri, 3, str(row.get("기사명", "")), data_fmt)
+                                    ws.write(ri, 4, str(row["출하처"]), data_fmt)
+                                    ws.write(ri, 5, str(row["유형"]), data_fmt)
+                                    ws.write(ri, 6, str(row["제품명"]), data_fmt)
+                                    ws.write(ri, 7, str(row["규격"]), data_fmt)
+                                    try: qty_val = int(float(row["수량"]))
+                                    except: qty_val = 0
+                                    ws.write(ri, 8, qty_val, num_fmt)
+                                    ws.write(ri, 9, str(row["비고"]), data_fmt)
+                            else:
+                                # 개별 배차 모드 (수기 작성용 명세서 양식)
+                                ws.set_column('A:A', 6); ws.set_column('B:C', 15); ws.set_column('D:D', 25)
+                                ws.set_column('E:G', 12)
+                                
+                                ws.merge_range('A1:G2', "출고 명세서", title_fmt)
+                                
+                                # 상단부
+                                r_date = df_view.iloc[0]["출고일"]
+                                r_time = df_view.iloc[0]["출고시간"]
+                                r_dest = df_view.iloc[0]["출하처"]
+                                
+                                ws.write('A4', f"출고일자 : {r_date}", text_bold_fmt)
+                                ws.write('D4', f"출고시간 : {r_time}", text_bold_fmt)
+                                
+                                # 데이터 헤더
+                                headers = ["No", "유형", "제품명", "규격", "수량", "비고"]
+                                for i, h in enumerate(headers):
+                                    # C와 D 사이에 제품명이 넓으므로 C D E F G 로 매핑 (A, B, C, D, E, F)
+                                    ws.write(5, i, h, header_fmt)
+                                
+                                # 제품 데이터 쓰기
+                                current_row = 6
+                                for idx, (_, row) in enumerate(df_view.iterrows(), 1):
+                                    ws.write(current_row, 0, idx, data_fmt)
+                                    ws.write(current_row, 1, str(row["유형"]), data_fmt)
+                                    ws.write(current_row, 2, str(row["제품명"]), data_fmt)
+                                    ws.write(current_row, 3, str(row["규격"]), data_fmt)
+                                    try: qty_val = int(float(row["수량"]))
+                                    except: qty_val = 0
+                                    ws.write(current_row, 4, qty_val, num_fmt)
+                                    ws.write(current_row, 5, str(row["비고"]), data_fmt)
+                                    current_row += 1
+                                
+                                # 하단부 여백 및 수기 입력 공간
+                                current_row += 2
+                                ws.write(current_row, 0, f"▶ 출하처 : {r_dest}", text_bold_fmt)
+                                current_row += 2
+                                ws.write(current_row, 0, "기사명 : _____________________", text_left_fmt)
+                                ws.write(current_row, 3, "차량번호 : _____________________", text_left_fmt)
+                                current_row += 2
+                                ws.write(current_row, 0, "차량위생상태 : ( 양호 / 불량 )", text_left_fmt)
+                                ws.write(current_row, 3, "인수자 서명 : ____________________", text_left_fmt)
+                                
+                        return output.getvalue()
+                        
+                    current_state = target_df.to_csv(index=False) + doc_title + view_mode
+                    if st.session_state.get("outbound_cache_state") != current_state:
+                        st.session_state["outbound_cache_blob"] = get_excel_data(target_df, doc_title, view_mode)
+                        st.session_state["outbound_cache_state"] = current_state
+                        
+                    import base64
+                    excel_blob = st.session_state["outbound_cache_blob"]
+                    b64_data = base64.b64encode(excel_blob).decode("utf-8")
+                    dl_link = (
+                        f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_data}" '
+                        f'download="{file_name_prefix}.xlsx" '
+                        f'style="display: block; text-align: center; padding: 0.5rem; background-color: #f0f2f6; '
+                        f'border-radius: 4px; color: #31333f; text-decoration: none; border: 1px solid #c2c8d1; '
+                        f'font-weight: 500; font-family: sans-serif; margin-bottom: 1rem;">'
+                        f'📥 {doc_title} 엑셀 바로 다운로드'
+                        f'</a>'
+                    )
+                    st.markdown(dl_link, unsafe_allow_html=True)
+                    
+                    st.caption("✨ 아래 표를 바로 수정하거나 행을 추가 및 삭제한 뒤, **[변경사항 저장]** 버튼을 누르시면 데이터가 즉시 갱신됩니다.")
+                    edited_target = st.data_editor(target_df, num_rows="dynamic", use_container_width=True, key="out_editor_inline")
+                    
+                    if st.button("📝 현재 조회된 내역 변경사항 서버 저장", type="primary", key="save_inline_ed"):
+                        # 原 df_out 에서 조회되었던 데이터의 인덱스를 제외 (삭제)
+                        df_out_remain = df_out.drop(index=target_df.index)
+                        
+                        # 수정된 데이터셋을 하단에 추가
+                        df_out_new = pd.concat([df_out_remain, edited_target], ignore_index=True)
+                        
+                        # 날짜, 시간순 정렬 (데이터베이스를 깔끔하게 유지하기 위함)
+                        if "출고일" in df_out_new.columns and "출고시간" in df_out_new.columns:
+                            df_out_new = df_out_new.sort_values(by=["출고일", "출고시간"], ascending=[True, True])
+                            
+                        df_out_new.to_csv(OUTBOUND_FILE, index=False, encoding='utf-8-sig')
+                        st.success("✔️ 데이터 갱신이 완료되었습니다.")
+                        st.rerun()
 
 # --- 10. HACCP 관리 메뉴 ---
 elif menu_selection == "HACCP":
@@ -4086,17 +4724,13 @@ elif menu_selection == "HACCP":
                             borderwidth=1,
                             borderpad=5,
                         ))
-
                     # 레인별 독립 Y 인덱스 관리
                     lane_y_idx  = {ln: 0 for ln in all_lanes}
                     # 각 단계의 실제 y_mid를 저장 (합류 화살표 Y 계산용)
-                    # key: (lane, 순서)  val: y_mid
                     step_ymid   = {}
-
                     # 레인별 단계 목록 (순서 정렬)
                     lane_steps  = {ln: df_flow[df_flow["lane"] == ln].reset_index(drop=True) for ln in all_lanes}
 
-                    # 각 레인 단계별 박스 그리기
                     for ln in all_lanes:
                         steps = lane_steps[ln]
                         cx    = lane_xs[ln]
@@ -4655,6 +5289,45 @@ elif menu_selection == "HACCP":
 
             df_flow = load_flowchart_by_cat(sel_cat_id)
             df_dec  = load_ccp_decision(sel_cat_id)
+
+            # ── [개선] 위해요소분석 결과와 자동 동기화 (강력한 매칭) ─────────
+            sync_count = 0
+            if os.path.exists(HAZARD_FILE):
+                try:
+                    df_haz_global = pd.read_csv(HAZARD_FILE, encoding="utf-8-sig").fillna("")
+                    # 현재 카테고리 + 최종위해요소='Y' 필터
+                    df_haz_sync = df_haz_global[
+                        (df_haz_global["카테고리"].astype(str).str.strip() == sel_cat_name.strip()) & 
+                        (df_haz_global["최종위해요소"].astype(str).str.strip().str.upper() == "Y")
+                    ]
+                    
+                    for _, h_row in df_haz_sync.iterrows():
+                        h_step = str(h_row["공정명"]).strip()
+                        h_type = str(h_row["유형"]).strip()[:1]
+                        h_hz   = str(h_row["위해요소"]).strip()
+                        
+                        exists = False
+                        if not df_dec.empty:
+                            exists = ((df_dec["단계명"].astype(str).str.strip() == h_step) & 
+                                      (df_dec["위해유형"].astype(str).str.strip().str.startswith(h_type)) & 
+                                      (df_dec["위해요소"].astype(str).str.strip() == h_hz)).any()
+                        
+                        if not exists:
+                            new_dec_row = pd.DataFrame([{
+                                "단계명": h_step, "위해유형": h_type, "위해요소": h_hz,
+                                "Q1_답변": "", "Q1_비고": "", "Q2_답변": "", "Q2_비고": "",
+                                "Q21_답변": "", "Q21_비고": "", "Q3_답변": "", "Q3_비고": "",
+                                "Q4_답변": "", "Q4_비고": "", "Q5_답변": "", "Q5_비고": "",
+                                "CCP결정": "", "CCP번호": "", "비고": ""
+                            }])
+                            df_dec = pd.concat([df_dec, new_dec_row], ignore_index=True)
+                            sync_count += 1
+                    
+                    if sync_count > 0:
+                        save_ccp_decision(sel_cat_id, df_dec)
+                        st.info(f"🔄 위해요소분석 결과로부터 새로운 항목 {sync_count}건이 자동으로 추가되었습니다.")
+                except Exception:
+                    pass
 
             if df_flow.empty:
                 st.info("선택한 카테고리의 공정 흐름도 데이터가 없습니다.")
@@ -5380,70 +6053,77 @@ elif menu_selection == "HACCP":
                 df_haz_cat = df_haz[mask_cat].copy()
 
                 # ── 탭: 목록 조회 | 항목 추가 | 엑셀 출력 ──
-                t_view, t_add, t_import, t_excel = st.tabs(["목록 조회", "항목 추가/수정", "엑셀 가져오기", "엑셀 출력"])
+                t_view, t_add, t_excel = st.tabs(["목록 조회", "항목 추가/수정", "엑셀 출력"])
+                PKX = f"haz_{sel_cat_id}"
+
+                # 세션 상태 초기화 (수정용)
+                if f"{PKX}_edit_proc" not in st.session_state: st.session_state[f"{PKX}_edit_proc"] = ""
+                if f"{PKX}_edit_type" not in st.session_state: st.session_state[f"{PKX}_edit_type"] = ""
 
                 with t_view:
-                    if df_haz_cat.empty:
-                        st.info("등록된 위해요소 분석 항목이 없습니다.")
+                    if not proc_list:
+                        st.info("해당 카테고리의 공정 흐름도에 '공정' 유형으로 등록된 단계가 없습니다.")
                     else:
-                        # No 순 정렬
-                        df_haz_cat["_no_s"] = df_haz_cat["공정명"].map(lambda s: int(proc_no_map.get(s,9999)) if str(proc_no_map.get(s,9999)).isdigit() else 9999)
-                        df_haz_cat = df_haz_cat.sort_values(["_no_s","유형"]).drop(columns=["_no_s"]).reset_index(drop=True)
-
-                        # ── rowspan 계산 ──
-                        # 공정명 rowspan: 연속된 같은 공정명 묶기
-                        # 발생원인·예방조치 rowspan: 공정+유형+발생원인 동일한 연속 행 묶기
-                        from collections import OrderedDict
-
-                        # 먼저 전체 행 데이터 수집
+                        # ── [개선] 공정 흐름도 단계 기반 자동 연동 목록 조회 ──
                         rows_data = []
-                        for ri, row in df_haz_cat.iterrows():
-                            proc  = str(row.get("공정명","")).strip()
-                            typ   = str(row.get("유형","")).strip()
-                            sev   = str(row.get("심각성","")).strip()
-                            prob  = str(row.get("발생가능성","")).strip()
-                            hz    = str(row.get("위해요소","")).strip()
-                            cause = str(row.get("발생원인","")).strip()
-                            prev  = str(row.get("예방조치및관리방법","")).strip()
-                            is_final = False
-                            total_v2 = ""
-                            try:
-                                if sev and prob and sev not in ["","None","nan"] and prob not in ["","None","nan"]:
-                                    tv = int(float(sev))*int(float(prob))
-                                    total_v2 = str(tv)
-                                    is_final = tv >= 3
-                            except Exception: pass
-                            orig_idx2 = df_haz[mask_cat].index[ri] if ri < len(df_haz[mask_cat]) else None
-                            rows_data.append({
-                                "ri":ri,"proc":proc,"typ":typ,"sev":sev,"prob":prob,
-                                "hz":hz,"cause":cause,"prev":prev,"total":total_v2,
-                                "is_final":is_final,"orig_idx":orig_idx2
-                            })
+                        # No 순으로 정렬된 공정 목록 사용
+                        sorted_procs = sorted(proc_list, key=lambda x: int(proc_no_map.get(x, 9999)))
 
-                        # ── 연속 rowspan 계산 (연속된 같은 값만 묶음) ──
+                        for p_nm in sorted_procs:
+                            p_df_all = df_haz_cat[df_haz_cat["공정명"] == p_nm].copy()
+                            if p_df_all.empty:
+                                # 흐름도에는 있으나 분석 데이터가 없는 경우 -> 빈 행 표시 (자동 연동)
+                                rows_data.append({
+                                    "ri": -1, "proc": p_nm, "typ": "-", "hz": "<span style='color:#ccc;'>(분석 정보 없음)</span>",
+                                    "sev": "-", "prob": "-", "total": "-", "cause": "-", "prev": "-",
+                                    "is_final": False, "orig_idx": None
+                                })
+                            else:
+                                p_df_all = p_df_all.sort_values("유형")
+                                for ri, row in p_df_all.iterrows():
+                                    sev  = str(row.get("심각성","")).strip()
+                                    prob = str(row.get("발생가능성","")).strip()
+                                    is_final = False
+                                    total_v2 = ""
+                                    try:
+                                        if sev and prob and sev not in ["","None","nan"] and prob not in ["","None","nan"]:
+                                            tv = int(float(sev))*int(float(prob))
+                                            total_v2 = str(tv)
+                                            is_final = tv >= 3
+                                    except Exception: pass
+                                    # df_haz[mask_cat] 에서의 인덱스가 필요함
+                                    idx_in_cat = df_haz_cat[
+                                        (df_haz_cat["공정명"] == p_nm) & 
+                                        (df_haz_cat["유형"] == row["유형"]) & 
+                                        (df_haz_cat["위해요소"] == row["위해요소"])
+                                    ].index[0]
+                                    rows_data.append({
+                                        "ri": ri, "proc": p_nm, "typ": str(row.get("유형","")).strip(),
+                                        "hz": str(row.get("위해요소","")).strip(),
+                                        "sev": sev, "prob": prob, "total": total_v2, "cause": str(row.get("발생원인","")).strip(),
+                                        "prev": str(row.get("예방조치및관리방법","")).strip(),
+                                        "is_final": is_final, "orig_idx": idx_in_cat
+                                    })
+
                         n = len(rows_data)
-                        proc_rowspan_arr  = [0] * n   # 0=출력안함, N=rowspan N
+                        proc_rowspan_arr  = [0] * n
                         cause_rowspan_arr = [0] * n
 
                         i = 0
                         while i < n:
-                            # 공정명 연속 그룹
                             j = i
-                            while j < n and rows_data[j]["proc"] == rows_data[i]["proc"]:
-                                j += 1
-                            proc_rowspan_arr[i] = j - i   # 첫 행에 span 값
+                            while j < n and rows_data[j]["proc"] == rows_data[i]["proc"]: j += 1
+                            proc_rowspan_arr[i] = j - i
                             i = j
 
                         i = 0
                         while i < n:
-                            # 공정+유형+발생원인 연속 그룹
                             j = i
                             while j < n and (
                                 rows_data[j]["proc"]  == rows_data[i]["proc"] and
                                 rows_data[j]["typ"]   == rows_data[i]["typ"]  and
                                 rows_data[j]["cause"] == rows_data[i]["cause"]
-                            ):
-                                j += 1
+                            ): j += 1
                             cause_rowspan_arr[i] = j - i
                             i = j
 
@@ -5544,15 +6224,23 @@ elif menu_selection == "HACCP":
                             if db.button("취소", key=f"haz_delcancel2_{sel_cat_id}"):
                                 st.rerun()
 
-                        # 전체 삭제
+                        # ── 수정 버튼 (세션 상태 타겟팅) ──
                         st.markdown("---")
-                        with st.expander("⚠️ 전체 삭제 (현재 카테고리)"):
-                            st.error(f"**{sel_cat_name}** 카테고리의 위해요소 데이터 **전체({len(df_haz_cat)}건)**를 삭제합니다. 이 작업은 되돌릴 수 없습니다.")
-                            if st.button("전체 삭제 실행", key=f"haz_del_all_{sel_cat_id}", type="primary"):
-                                df_haz = df_haz[df_haz["카테고리"] != sel_cat_name].reset_index(drop=True)
-                                df_haz.to_csv(HAZARD_FILE, index=False, encoding='utf-8-sig')
-                                st.success("전체 삭제 완료!")
-                                st.rerun()
+                        st.markdown("🔍 **항목 빠르게 수정하기**")
+                        c1_edit, c2_edit, c3_edit = st.columns([2, 1, 1])
+                        with c1_edit:
+                            sel_edit_p = st.selectbox("수정할 공정 단계 선택", [""] + sorted_procs, key=f"haz_quick_p_{sel_cat_id}")
+                        with c2_edit:
+                            sel_edit_t = st.selectbox("유형 선택", ["", "B", "C", "P"], key=f"haz_quick_t_{sel_cat_id}")
+                        with c3_edit:
+                            st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
+                            if st.button("수정 모드 전환", key=f"haz_quick_btn_{sel_cat_id}", type="primary"):
+                                if sel_edit_p and sel_edit_t:
+                                    st.session_state[f"{PKX}_edit_proc"] = sel_edit_p
+                                    st.session_state[f"{PKX}_edit_type"] = sel_edit_t
+                                    st.success(f"'{sel_edit_p} / {sel_edit_t}' 항목 수정 설정 완료! 상단 **'항목 추가/수정'** 탭을 클릭하세요.")
+                                else:
+                                    st.warning("공정과 유형을 모두 선택하세요.")
 
                 with t_add:
                     st.markdown("#### 위해요소 항목 등록")
@@ -5562,10 +6250,20 @@ elif menu_selection == "HACCP":
                     # ── STEP 1: 공정명 + 유형 선택 ──
                     st.markdown("**① 공정명과 유형 선택**")
                     h1, h2 = st.columns([2, 1])
+                    
+                    # 수정을 위해 넘어온 초기값 계산
+                    def_p_idx = 0
+                    if st.session_state[f"{PKX}_edit_proc"] in proc_list:
+                        def_p_idx = proc_list.index(st.session_state[f"{PKX}_edit_proc"]) + 1
+                    
+                    def_t_idx = 0
+                    if st.session_state[f"{PKX}_edit_type"] in ["B","C","P"]:
+                        def_t_idx = ["B","C","P"].index(st.session_state[f"{PKX}_edit_type"]) + 1
+
                     with h1:
-                        sel_proc = st.selectbox("공정명 *", [""] + proc_list, key=f"{PKX}_proc")
+                        sel_proc = st.selectbox("공정명 *", [""] + proc_list, index=def_p_idx, key=f"{PKX}_proc")
                     with h2:
-                        sel_type = st.selectbox("유형 *", ["", "B", "C", "P"], key=f"{PKX}_type")
+                        sel_type = st.selectbox("유형 *", ["", "B", "C", "P"], index=def_t_idx, key=f"{PKX}_type")
 
                     cur_type = st.session_state.get(f"{PKX}_type", "")
                     cur_proc = st.session_state.get(f"{PKX}_proc", "")
@@ -5638,8 +6336,8 @@ elif menu_selection == "HACCP":
                                         except Exception: pass
                                 sev_c2 = "#C0392B" if sev_val=="3" else ("#E67E22" if sev_val=="2" else ("#27AE60" if sev_val=="1" else "#aaa"))
 
-                                # 기존 항목이면 기본 체크, 발생가능성도 기존값
-                                default_chk  = True if (is_existing or all_checked) else False
+                                # [개선] 모든 위해요소를 기본적으로 체크 상태로 표시 (사용자 신속 등록 요청)
+                                default_chk  = True
                                 default_prob_val = int(already_map[hz_item]) if is_existing and already_map[hz_item].isdigit() else 1
 
                                 c1, c2, c3, c4 = st.columns([0.3, 2, 1, 1])
@@ -5717,127 +6415,6 @@ elif menu_selection == "HACCP":
                     else:
                         st.info("공정명과 유형을 선택하면 위해요소 입력 화면이 나타납니다.")
 
-                with t_import:
-                    st.markdown("#### 엑셀 파일에서 데이터 가져오기")
-                    st.info("**위해요소분석_입력양식.xlsx** 형식 또는 기존 위해요소목록표 형식 모두 지원합니다.")
-
-                    up_file = st.file_uploader("엑셀 업로드 (.xlsx)", type=["xlsx"], key=f"haz_import_{sel_cat_id}")
-
-                    if up_file:
-                        import openpyxl as _opxl2, io as _io3
-                        try:
-                            wb_imp = _opxl2.load_workbook(_io3.BytesIO(up_file.read()))
-                            ws_imp = wb_imp.worksheets[0]
-
-                            # 심각성 맵 구축
-                            sev_map_imp = {}
-                            if len(wb_imp.worksheets) > 1:
-                                ws_sev_imp = wb_imp.worksheets[1]
-                                cur_t = "B"
-                                for srow in ws_sev_imp.iter_rows(min_row=1, max_row=ws_sev_imp.max_row, values_only=True):
-                                    if srow[0] in ("B","C","P"): cur_t = srow[0]
-                                    nm = str(srow[1]).strip() if len(srow)>1 and srow[1] else ""
-                                    sv = srow[2] if len(srow)>2 else None
-                                    if nm and sv is not None:
-                                        try: sev_map_imp[nm] = int(sv)
-                                        except Exception: pass
-                            if not sev_map_imp and not df_sev_fresh.empty:
-                                for _, sr in df_sev_fresh.iterrows():
-                                    try: sev_map_imp[str(sr["위해요소"])] = int(sr["심각성"])
-                                    except Exception: pass
-
-                            # ── 형식 자동 감지 ──
-                            # 헤더 행 읽기
-                            first_row = [str(c.value).strip() if c.value else "" for c in ws_imp[1]]
-                            is_new_fmt = "카테고리" in first_row and "위해요소" in first_row
-
-                            parsed = []
-
-                            if is_new_fmt:
-                                # 새 양식: 1행 헤더, 2행부터 데이터
-                                col_map = {v: i for i, v in enumerate(first_row)}
-                                for rr in ws_imp.iter_rows(min_row=2, max_row=ws_imp.max_row, values_only=True):
-                                    hz_i = rr[col_map.get("위해요소", 3)] if len(rr) > col_map.get("위해요소",3) else None
-                                    if not hz_i or str(hz_i).strip() in ("","None"): continue
-                                    def gv(key, default=""):
-                                        idx = col_map.get(key, -1)
-                                        if idx < 0 or idx >= len(rr): return default
-                                        v = rr[idx]
-                                        return str(v).strip() if v is not None else default
-                                    hz_i    = gv("위해요소")
-                                    proc_i  = gv("공정명")
-                                    type_i  = gv("유형")
-                                    cause_i = gv("발생원인")
-                                    prev_i  = gv("예방조치및관리방법")
-                                    prob_i  = gv("발생가능성")
-                                    sev_raw = gv("심각성")
-                                    # 심각성: 직접 입력값 우선, 없으면 sev_map 조회
-                                    auto_sev_i = sev_raw if sev_raw and sev_raw not in ("","None","nan") else (str(sev_map_imp[hz_i]) if hz_i in sev_map_imp else "")
-                                    prob_str = prob_i if prob_i and prob_i not in ("","None") else ""
-                                    total_i=""; is_fin_i=False
-                                    try:
-                                        if auto_sev_i and prob_str:
-                                            tv2=int(auto_sev_i)*int(prob_str); total_i=str(tv2); is_fin_i=tv2>3
-                                    except Exception: pass
-                                    parsed.append({
-                                        "카테고리": sel_cat_name, "No": proc_no_map.get(proc_i,""),
-                                        "공정명": proc_i, "유형": type_i, "위해요소": hz_i,
-                                        "발생원인": cause_i, "심각성": auto_sev_i,
-                                        "발생가능성": prob_str, "종합평가": total_i,
-                                        "최종위해요소": "Y" if is_fin_i else "",
-                                        "예방조치및관리방법": prev_i,
-                                    })
-                            else:
-                                # 기존 위해요소목록표 형식: 7행부터
-                                cur_no_i=""; cur_proc_i=""; cur_type_i=""; cur_cause_i=""; cur_prev_i=""
-                                for rr in ws_imp.iter_rows(min_row=7, max_row=ws_imp.max_row, values_only=True):
-                                    no_i=rr[0]; proc_i=rr[1]; type_i=rr[2]; hz_i=rr[3]; cause_i=rr[4]
-                                    prob_i=rr[6] if len(rr)>6 else None; prev_i=rr[8] if len(rr)>8 else None
-                                    if not hz_i: continue
-                                    hz_i = str(hz_i).strip()
-                                    if no_i is not None: cur_no_i=str(no_i).replace("\n","").strip()
-                                    if proc_i is not None: cur_proc_i=str(proc_i).replace("\n"," ").strip()
-                                    if type_i is not None: cur_type_i=str(type_i).strip()
-                                    if cause_i is not None: cur_cause_i=str(cause_i).strip()
-                                    if prev_i is not None and str(prev_i).strip() not in ("","None"):
-                                        cur_prev_i=str(prev_i).strip()
-                                    auto_sev_i=str(sev_map_imp[hz_i]) if hz_i in sev_map_imp else ""
-                                    prob_str=str(int(prob_i)) if isinstance(prob_i,(int,float)) else (str(prob_i).strip() if prob_i else "")
-                                    total_i=""; is_fin_i=False
-                                    try:
-                                        if auto_sev_i and prob_str:
-                                            tv2=int(auto_sev_i)*int(prob_str); total_i=str(tv2); is_fin_i=tv2>3
-                                    except Exception: pass
-                                    parsed.append({
-                                        "카테고리": sel_cat_name, "No": cur_no_i, "공정명": cur_proc_i,
-                                        "유형": cur_type_i, "위해요소": hz_i,
-                                        "발생원인": cur_cause_i, "심각성": auto_sev_i,
-                                        "발생가능성": prob_str, "종합평가": total_i,
-                                        "최종위해요소": "Y" if is_fin_i else "",
-                                        "예방조치및관리방법": cur_prev_i,
-                                    })
-
-                            if parsed:
-                                st.success(f"파싱 완료: **{len(parsed)}건** — {'새 양식' if is_new_fmt else '기존 위해요소목록표 형식'}")
-                                df_preview = pd.DataFrame(parsed)
-                                st.dataframe(
-                                    df_preview[["공정명","유형","위해요소","심각성","발생가능성","종합평가","최종위해요소"]],
-                                    use_container_width=True, height=300
-                                )
-                                st.warning(f"현재 **{sel_cat_name}** 카테고리의 기존 데이터는 덮어씁니다.")
-                                c_ok, c_cancel, _ = st.columns([1,1,3])
-                                if c_ok.button("가져오기 확인", type="primary", key=f"imp_ok_{sel_cat_id}"):
-                                    df_haz_rest = df_haz[df_haz["카테고리"] != sel_cat_name]
-                                    df_haz_new  = pd.concat([df_haz_rest, df_preview], ignore_index=True)
-                                    df_haz_new.to_csv(HAZARD_FILE, index=False, encoding='utf-8-sig')
-                                    st.success(f"{len(parsed)}건 저장 완료!")
-                                    st.rerun()
-                                if c_cancel.button("취소", key=f"imp_cancel_{sel_cat_id}"):
-                                    st.rerun()
-                            else:
-                                st.error("파싱된 데이터가 없습니다. 헤더 행 또는 데이터를 확인하세요.")
-                        except Exception as e:
-                            st.error(f"파일 읽기 오류: {e}")
 
                 with t_excel:
                     st.markdown("#### 엑셀 출력 (보관용)")
@@ -5973,7 +6550,7 @@ elif menu_selection == "HACCP":
             return d
 
         def load_rm_list():
-            RM_COLS2 = ["원자재코드","원자재명","유형","포장단위","원산지","제조원","판매원",
+            RM_COLS2 = ["원자재코드","원자재명","유형","규격","원산지","제조원","판매원",
                         "검사주기","비고","최소_수분","최대_수분","최소_밀도","최대_밀도","관능_기준"]
             if os.path.exists(RM_FILE):
                 try:
@@ -6009,44 +6586,66 @@ elif menu_selection == "HACCP":
             TD = "background:#fff;padding:7px 8px;border:1px solid #d0d7de;vertical-align:middle;word-break:break-word;line-height:1.6;font-size:11px;"
 
             t_view, t_add, t_excel = st.tabs(["목록 조회", "항목 추가/수정", "엑셀 출력"])
+            
+            # 세션 상태 초기화 (수정용)
+            PMX = "rmhaz_state"
+            if f"{PMX}_edit_rm" not in st.session_state: st.session_state[f"{PMX}_edit_rm"] = ""
+            if f"{PMX}_edit_type" not in st.session_state: st.session_state[f"{PMX}_edit_type"] = ""
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # 탭1: 목록 조회 (전체 원·부자재)
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             with t_view:
-                if df_haz_all.empty:
-                    st.info("등록된 위해요소 분석 항목이 없습니다.")
-                else:
-                    # 원자재명 기준 정렬 후 유형(B/C/P) 정렬
-                    df_haz_all = df_haz_all.sort_values(["원자재명","유형"]).reset_index(drop=True)
-
+                    # ── [개선] 등록된 원부자재 기반 자동 연동 목록 조회 ──
                     rows_data = []
-                    for ri, row in df_haz_all.iterrows():
-                        rm_nm = str(row.get("원자재명","")).strip()
-                        typ   = str(row.get("유형","")).strip()
-                        sev   = str(row.get("심각성","")).strip()
-                        prob  = str(row.get("발생가능성","")).strip()
-                        hz    = str(row.get("위해요소","")).strip()
-                        cause = str(row.get("발생원인","")).strip()
-                        prev  = str(row.get("예방조치및관리방법","")).strip()
-                        total_v2 = ""; is_final = False
-                        try:
-                            if sev and prob and sev not in ["","None","nan"] and prob not in ["","None","nan"]:
-                                tv = int(float(sev)) * int(float(prob))
-                                total_v2 = str(tv); is_final = tv >= 3
-                        except Exception: pass
-                        rows_data.append({
-                            "ri":ri,"rm_nm":rm_nm,"typ":typ,"sev":sev,"prob":prob,
-                            "hz":hz,"cause":cause,"prev":prev,
-                            "total":total_v2,"is_final":is_final,
-                            "orig_idx": df_rm_haz.index[ri] if ri < len(df_rm_haz) else None
-                        })
+                    # 가나다순 정렬된 원자재 목록 사용
+                    sorted_rms = df_rm_list.sort_values("원자재명")
+
+                    for _, rm_row in sorted_rms.iterrows():
+                        r_nm = rm_row["원자재명"]
+                        r_cd = rm_row["원자재코드"]
+                        r_df_all = df_rm_haz[df_rm_haz["원자재코드"] == r_cd].copy()
+                        
+                        if r_df_all.empty:
+                            # 등록은 되어있으나 분석 데이터가 없는 경우 -> 빈 행 표시
+                            rows_data.append({
+                                "ri": -1, "rm_nm": r_nm, "typ": "-", "hz": "<span style='color:#ccc;'>(분석 정보 없음)</span>",
+                                "sev": "-", "prob": "-", "total": "-", "cause": "-", "prev": "-",
+                                "is_final": False, "orig_idx": None
+                            })
+                        else:
+                            r_df_all = r_df_all.sort_values("유형")
+                            for ri, row in r_df_all.iterrows():
+                                sev = str(row.get("심각성","")).strip()
+                                prob = str(row.get("발생가능성","")).strip()
+                                is_final = False
+                                total_v2 = ""
+                                try:
+                                    if sev and prob and sev not in ["","None","nan"] and prob not in ["","None","nan"]:
+                                        tv = int(float(sev)) * int(float(prob))
+                                        total_v2 = str(tv); is_final = tv >= 3
+                                except Exception: pass
+                                
+                                idx_in_haz = df_rm_haz[
+                                    (df_rm_haz["원자재코드"] == r_cd) & 
+                                    (df_rm_haz["유형"] == row["유형"]) & 
+                                    (df_rm_haz["위해요소"] == row["위해요소"])
+                                ].index[0]
+                                
+                                rows_data.append({
+                                    "ri": ri, "rm_nm": r_nm, "typ": str(row.get("유형","")).strip(),
+                                    "hz": str(row.get("위해요소","")).strip(),
+                                    "sev": sev, "prob": prob, "total": total_v2, 
+                                    "cause": str(row.get("발생원인","")).strip(),
+                                    "prev": str(row.get("예방조치및관리방법","")).strip(),
+                                    "is_final": is_final, "orig_idx": idx_in_haz
+                                })
 
                     n = len(rows_data)
-                    # rowspan: 원자재명 연속 그룹
                     nm_rowspan_arr    = [0]*n
                     typ_rowspan_arr   = [0]*n
                     cause_rowspan_arr = [0]*n
+
                     i = 0
                     while i < n:
                         j = i
@@ -6172,17 +6771,23 @@ elif menu_selection == "HACCP":
                         if db.button("취소", key="rmhaz_delcancel"):
                             st.rerun()
 
+                    # ── [개선] 항목 빠르게 수정하기 ──
                     st.markdown("---")
-                    with st.expander("⚠️ 특정 원·부자재 전체 삭제"):
-                        del_nm_list = df_haz_all["원자재명"].unique().tolist()
-                        del_nm_sel  = st.selectbox("삭제할 원·부자재 선택", ["선택하세요"] + del_nm_list, key="rmhaz_del_nm_sel")
-                        if del_nm_sel != "선택하세요":
-                            cnt_del = len(df_haz_all[df_haz_all["원자재명"]==del_nm_sel])
-                            st.error(f"**{del_nm_sel}** 의 위해요소 데이터 **전체({cnt_del}건)**를 삭제합니다.")
-                            if st.button("전체 삭제 실행", key="rmhaz_del_all", type="primary"):
-                                df_rm_haz = df_rm_haz[df_rm_haz["원자재명"] != del_nm_sel].reset_index(drop=True)
-                                df_rm_haz.to_csv(_RM_HAZ_FILE, index=False, encoding='utf-8-sig')
-                                st.success("전체 삭제 완료!"); st.rerun()
+                    st.markdown("🔍 **항목 빠르게 수정하기**")
+                    c1_em, c2_em, c3_em = st.columns([2, 1, 1])
+                    with c1_em:
+                        sel_edit_rm = st.selectbox("수정할 원·부자재 선택", [""] + rm_display, key="rmhaz_quick_rm")
+                    with c2_em:
+                        sel_edit_ty = st.selectbox("유형 선택", ["", "B", "C", "P"], key="rmhaz_quick_ty")
+                    with c3_em:
+                        st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
+                        if st.button("수정 모드 전환", key="rmhaz_quick_btn", type="primary"):
+                            if sel_edit_rm and sel_edit_ty:
+                                st.session_state[f"{PMX}_edit_rm"] = sel_edit_rm
+                                st.session_state[f"{PMX}_edit_type"] = sel_edit_ty
+                                st.success(f"'{sel_edit_rm} / {sel_edit_ty}' 항목 수정 설정 완료! 상단 **'항목 추가/수정'** 탭을 클릭하세요.")
+                            else:
+                                st.warning("원부자재와 유형을 모두 선택하세요.")
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # 탭2: 항목 추가/수정
@@ -6192,7 +6797,11 @@ elif menu_selection == "HACCP":
 
                 # ① 원·부자재 선택
                 st.markdown("**① 원·부자재 선택**")
-                sel_rm_disp = st.selectbox("원·부자재 선택 *", [""] + rm_display, key="rmhaz_add_rm_sel")
+                def_rm_idx = 0
+                if st.session_state[f"{PMX}_edit_rm"] in rm_display:
+                    def_rm_idx = rm_display.index(st.session_state[f"{PMX}_edit_rm"]) + 1
+                
+                sel_rm_disp = st.selectbox("원·부자재 선택 *", [""] + rm_display, index=def_rm_idx, key="rmhaz_add_rm_sel")
                 if sel_rm_disp and sel_rm_disp in rm_display:
                     sel_rm_idx  = rm_display.index(sel_rm_disp)
                     sel_rm_code = rm_codes[sel_rm_idx]
@@ -6216,7 +6825,11 @@ elif menu_selection == "HACCP":
                     # ② 위해요소 유형(B/C/P) 선택
                     st.divider()
                     st.markdown("**② 위해요소 유형 선택**")
-                    sel_type_rm = st.selectbox("위해요소 유형 *", ["", "B", "C", "P"], key=f"{PKR}_type")
+                    def_ty_idx = 0
+                    if st.session_state[f"{PMX}_edit_type"] in ["B","C","P"]:
+                        def_ty_idx = ["B","C","P"].index(st.session_state[f"{PMX}_edit_type"]) + 1
+
+                    sel_type_rm = st.selectbox("위해요소 유형 *", ["", "B", "C", "P"], index=def_ty_idx, key=f"{PKR}_type")
 
                     if sel_type_rm:
                         existing_same_rm = df_rm_haz[
@@ -6274,7 +6887,8 @@ elif menu_selection == "HACCP":
                                         try: sev_val_rm = str(int(m2.iloc[0]["심각성"]))
                                         except Exception: pass
                                 sev_c2 = "#C0392B" if sev_val_rm=="3" else ("#E67E22" if sev_val_rm=="2" else ("#27AE60" if sev_val_rm=="1" else "#aaa"))
-                                default_chk_rm = True if (is_existing_rm or all_checked_rm) else False
+                                # 모든 위해요소 기본 체크 상태로 표시
+                                default_chk_rm = True
                                 default_prob_v = int(already_map_rm[hz_item]) if is_existing_rm and already_map_rm[hz_item].isdigit() else 1
 
                                 c1, c2, c3, c4 = st.columns([0.3, 2, 1, 1])
@@ -6459,3 +7073,38 @@ elif menu_selection == "HACCP":
                         type="primary",
                     )
                     st.caption(f"총 {len(df_xl)}건 | {xl_label}")
+
+# --- 9. 시스템 히스토리 메뉴 ---
+elif menu_selection == "시스템 히스토리":
+    st.markdown('<div class="section-title">📜 시스템 작업 히스토리</div>', unsafe_allow_html=True)
+    st.write("누가 어떤 수정을 했는지, 시스템에서 자동으로 기록된 히스토리를 확인합니다.")
+    
+    if os.path.exists(HISTORY_LOG_FILE):
+        df_hist = pd.read_csv(HISTORY_LOG_FILE, dtype=str).fillna("-")
+        df_hist = df_hist.sort_values(by="일시", ascending=False)
+        
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            search_h = st.text_input("🔍 내용 검색", placeholder="작업내용 또는 상세 입력...")
+        with c2:
+            target_filter = st.selectbox("메뉴 필터", ["전체"] + sorted(df_hist["대상"].unique().tolist()))
+        with c3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("🔄 새로고침", use_container_width=True):
+                st.rerun()
+        
+        if search_h:
+            df_hist = df_hist[df_hist["작업내용"].str.contains(search_h, na=False) | df_hist["상세"].str.contains(search_h, na=False)]
+        if target_filter != "전체":
+            df_hist = df_hist[df_hist["대상"] == target_filter]
+            
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        
+        if st.button("로그 비우기 (주의)", type="secondary"):
+            if st.checkbox("정말 삭제하시겠습니까?"):
+                pd.DataFrame(columns=["일시", "작업자", "대상", "작업내용", "상세"]).to_csv(HISTORY_LOG_FILE, index=False, encoding='utf-8-sig')
+                log_history("로그 초기화", "시스템", "히스토리 로그 파일을 초기화함")
+                st.success("로그가 초기화되었습니다.")
+                st.rerun()
+    else:
+        st.info("아직 기록된 히스토리가 없습니다.")
