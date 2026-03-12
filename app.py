@@ -4156,10 +4156,11 @@ elif menu_selection == "재고 관리":
         
         with col_form:
             st.markdown("##### 🚨 재고 수동 조정 패널")
-            with st.form("adj_inv_form_v2", clear_on_submit=True):
-                mode = st.radio("조정 모드", ["기존 배치 수정", "미생산/신규 항목 강제 등록"], horizontal=True)
-                
-                if mode == "기존 배치 수정":
+            # 라디오 버튼을 폼 외부로 배치하여 변경 시 즉시 화면 갱신 유도
+            adj_mode = st.radio("조정 모드", ["기존 배치 수정", "미생산/신규 항목 강제 등록"], horizontal=True, key="inv_adj_mode_main")
+            
+            with st.form("adj_inv_form_final", clear_on_submit=True):
+                if adj_mode == "기존 배치 수정":
                     if not df_detail_final.empty:
                         adj_opts = df_detail_final.apply(
                             lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) | {r['생산일']} | 잔여:{int(r['현재고'])}", axis=1
@@ -4174,20 +4175,34 @@ elif menu_selection == "재고 관리":
                     with c2: adj_reason = st.text_input("조정 사유", placeholder="필수 입력")
                     
                 else:
+                    # 미생산/신규 항목 강제 등록 모드
                     c1, c2 = st.columns(2)
                     with c1:
-                        p_opts = df_specs["제품명"].unique().tolist() if not df_specs.empty else []
-                        new_p = st.selectbox("제품 선택", ["직접 입력"] + p_opts)
-                        if new_p == "직접 입력": new_p = st.text_input("제품명 직접 입력")
-                        new_pd = st.date_input("생산일 지정", value=date.today())
+                        # 제품 마스터 목록(df_specs) 활용
+                        p_master_list = sorted(df_specs["제품명"].unique().tolist()) if not df_specs.empty else []
+                        sel_p_name = st.selectbox("제품 선택 (마스터 목록)", ["직접 입력"] + p_master_list)
+                        
+                        if sel_p_name == "직접 입력":
+                            final_p_name = st.text_input("제품명 직접 입력")
+                            suggested_type = "캡슐커피"
+                            suggested_spec = "EA"
+                        else:
+                            final_p_name = sel_p_name
+                            p_info = df_specs[df_specs["제품명"] == sel_p_name].iloc[0]
+                            suggested_type = str(p_info.get("유형", "캡슐커피"))
+                            suggested_spec = str(p_info.get("규격", "EA"))
+                            
+                        new_pd = st.date_input("임의 생산일(등록일) 지정", value=date.today())
+                        
                     with c2:
-                        new_pt = st.selectbox("유형", ["캡슐커피", "스틱커피", "원두커피", "생두(원료)"])
-                        new_ps = st.text_input("규격", value="EA")
+                        type_list = ["캡슐커피", "스틱커피", "원두커피", "생두(원료)"]
+                        new_pt = st.selectbox("유형", type_list, index=type_list.index(suggested_type) if suggested_type in type_list else 0)
+                        new_ps = st.text_input("규격", value=suggested_spec)
                         new_exp = st.text_input("소비기한", placeholder="YYYY-MM-DD")
                     
                     c3, c4 = st.columns(2)
-                    with c3: target_qty = st.number_input("등록할 재고 수량", min_value=0, step=1)
-                    with c4: adj_reason = st.text_input("등록 사유", value="신규 항목 강재 재고 등록")
+                    with c3: target_qty = st.number_input("강제 등록할 수량", min_value=0, step=1)
+                    with c4: adj_reason = st.text_input("등록 사유", value="신규 항목 강제 재고 등록")
                 
                 confirm = st.checkbox("데이터 위변조 및 수정 사항에 동의합니다.")
                 sub_btn = st.form_submit_button("🔁 재고 데이터 즉시 반영")
@@ -4196,7 +4211,7 @@ elif menu_selection == "재고 관리":
                     if not adj_reason.strip(): st.error("사유를 입력해주세요.")
                     elif not confirm: st.error("동의 체커에 체크해주세요.")
                     else:
-                        if mode == "기존 배치 수정":
+                        if adj_mode == "기존 배치 수정":
                             if sel_item == "선택하세요": st.error("배치를 선택해주세요.")
                             else:
                                 o_idx = adj_opts.index(sel_item)
@@ -4211,19 +4226,21 @@ elif menu_selection == "재고 관리":
                                 }
                                 df_adj = pd.concat([df_adj, pd.DataFrame([res_adj])], ignore_index=True)
                                 df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                                log_history("재고 수동 조정", target_row["제품명"], f"수량 {target_row['현재고']} -> {target_qty} / 사유: {adj_reason}")
                                 st.success("재고 수정 완료!"); st.rerun()
                         else:
-                            if not str(new_p).strip(): st.error("제품명을 입력해주세요.")
+                            if not str(final_p_name).strip(): st.error("제품명을 입력해주세요.")
                             else:
                                 res_adj = {
                                     "조정일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    "유형": new_pt, "제품명": str(new_p).strip(), "규격": new_ps,
+                                    "유형": new_pt, "제품명": str(final_p_name).strip(), "규격": new_ps,
                                     "생산일": str(new_pd), "소비기한": new_exp if new_exp else "-",
                                     "기존재고": 0, "변경재고": target_qty, "방향": "등록",
                                     "차이": target_qty, "사유": adj_reason
                                 }
                                 df_adj = pd.concat([df_adj, pd.DataFrame([res_adj])], ignore_index=True)
                                 df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                                log_history("신규 재고 강제 등록", str(final_p_name), f"수량 {target_qty} 등록 / 사유: {adj_reason}")
                                 st.success("신규 재고 등록 완료!"); st.rerun()
 
         st.divider()
