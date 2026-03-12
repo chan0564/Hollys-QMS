@@ -1,0 +1,6 @@
+WPy64-313110/
+__pycache__/
+*.pyc
+out.txt
+_search.txt
+_tmp_grep.txt
