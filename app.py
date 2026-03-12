@@ -761,7 +761,7 @@ with st.sidebar:
     elif menu_selection == "재고 관리":
         st.divider()
         st.markdown("#### 📦 재고 관리")
-        sub_menu = st.radio("하위 메뉴 선택:", ["현재고 현황 및 조정"])
+        sub_menu = st.radio("하위 메뉴 선택:", ["현재고 현황", "재고 조정 및 히스토리"])
 
     elif menu_selection == "출고 관리":
         st.divider()
@@ -4007,310 +4007,247 @@ elif menu_selection == "원·부자재 관리":
 
 # --- 재고 관리 메뉴 ---
 elif menu_selection == "재고 관리":
-    if sub_menu == "현재고 현황 및 조정":
-        st.markdown('<div class="section-title">📦 제품별 실시간 재고 현황 (영점 조정)</div>', unsafe_allow_html=True)
-        st.write("데이터 히스토리에 입력된 `생산량`과 출고 관리에 등록된 `출고량`이 자동 합산되어 현재고가 실시간으로 노출됩니다.")
-        
-        df_data = load_data()
-        df_out = load_outbound_records()
-        df_adj = load_inventory_adj()
-        
-        # ── 1) 제품별 총합 재고 (기존 방식, 영점조정용) ──
-        inv_dict = {}
-        for _, row in df_data.iterrows():
-            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
-            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
-            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
-            try: qty = int(float(str(row.get("생산량", "0")).replace(",","")))
-            except: qty = 0
-            inv_dict[key]["총생산량"] += qty
-            
-        for _, row in df_out.iterrows():
-            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
-            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
-            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
-            try: qty = int(float(str(row.get("수량", "0")).replace(",","")))
-            except: qty = 0
-            inv_dict[key]["총출고량"] += qty
-            
-        for _, row in df_adj.iterrows():
-            key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
-            if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
-            try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
-            except: diff = 0
-            inv_dict[key]["조정수량"] += diff
-            
-        inv_list = []
-        for k, v in inv_dict.items():
-            curr_qty = v["총생산량"] - v["총출고량"] + v["조정수량"]
-            inv_list.append({
-                "유형": k[0] if k[0] not in ["", "nan"] else "-",
-                "제품명": k[1],
-                "규격": k[2] if k[2] not in ["", "nan"] else "-",
-                "총생산량": v["총생산량"],
-                "총출고량": v["총출고량"],
-                "임의조정 누적분": v["조정수량"],
-                "현재고 (P)": curr_qty
-            })
-            
-        df_inv = pd.DataFrame(inv_list)
-        
-        # ── 2) 생산일 + 소비기한 기준 상세 재고 ──
-        st.markdown("#### 📊 생산일 · 소비기한별 상세 재고")
-        detail_inv = {}
-        for _, row in df_data.iterrows():
-            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
-            prod_date = str(row.get("생산일", "")).strip()
-            exp_date = str(row.get("소비기한", "")).strip()
-            if exp_date in ["", "nan", "None", "NaT"]: exp_date = "-"
-            prod_name = str(row.get("제품명", "")).strip()
-            prod_type = str(row.get("유형", "")).strip()
-            prod_spec = str(row.get("규격", "")).strip()
-            if prod_type in ["", "nan"]: prod_type = "-"
-            if prod_spec in ["", "nan"]: prod_spec = "-"
-            
-            dkey = (prod_type, prod_name, prod_spec, prod_date, exp_date)
-            if dkey not in detail_inv: detail_inv[dkey] = {"생산량": 0}
-            try: detail_inv[dkey]["생산량"] += int(float(str(row.get("생산량", "0")).replace(",","")))
-            except: pass
-        
-        # 배치별 출고량 집계 (제조일자+소비기한이 기록된 출고 내역)
-        batch_out_map = {}  # key: (제품명, 제조일자, 소비기한), value: 출고수량합
-        prod_out_unmatched = {}  # 배치 미지정 출고 (기존 데이터 호환)
-        for _, row in df_out.iterrows():
-            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
-            prod_name = str(row.get("제품명", "")).strip()
-            mfg_date = str(row.get("제조일자", "")).strip()
-            exp_date = str(row.get("소비기한", "")).strip()
-            if mfg_date in ["", "nan", "None"]: mfg_date = ""
-            if exp_date in ["", "nan", "None"]: exp_date = ""
-            
-            try: out_qty = int(float(str(row.get("수량", "0")).replace(",","")))
-            except: out_qty = 0
-            
-            if mfg_date and mfg_date != "-":
-                # 배치 매칭 출고
-                exp_key = exp_date if exp_date else "-"
-                bkey = (prod_name, mfg_date, exp_key)
-                if bkey not in batch_out_map: batch_out_map[bkey] = 0
-                batch_out_map[bkey] += out_qty
-            else:
-                # 배치 미지정 출고 (기존 데이터) → FIFO로 처리
-                if prod_name not in prod_out_unmatched: prod_out_unmatched[prod_name] = 0
-                prod_out_unmatched[prod_name] += out_qty
-        
-        # 조정량 (배치별 및 제품별)
-        batch_adj_map = {} # (제품명, 생산일, 소비기한) -> 조정수량
-        prod_adj_unmatched = {} # 제품명 -> 조정수량 (생산일 정보 없을 때)
-        for _, row in df_adj.iterrows():
-            pn = str(row.get("제품명", "")).strip()
-            if pn in ["", "-", "None", "nan"]: continue
-            pd_ = str(row.get("생산일", "")).strip()
-            exp_ = str(row.get("소비기한", "")).strip()
-            if exp_ in ["", "nan", "None"]: exp_ = "-"
-            try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
-            except: diff = 0
-            
-            if pd_ and pd_ != "-":
-                bkey = (pn, pd_, exp_)
-                batch_adj_map[bkey] = batch_adj_map.get(bkey, 0) + diff
-            else:
-                prod_adj_unmatched[pn] = prod_adj_unmatched.get(pn, 0) + diff
-        
-        detail_list = []
-        for dkey, dval in detail_inv.items():
-            detail_list.append({
-                "유형": dkey[0],
-                "제품명": dkey[1],
-                "규격": dkey[2],
-                "생산일": dkey[3],
-                "소비기한": dkey[4],
-                "생산량": dval["생산량"]
-            })
-        
-        df_detail = pd.DataFrame(detail_list)
-        if df_detail.empty:
-            st.info("재고를 산정할 데이터(생산량)가 존재하지 않습니다.")
-        else:
-            df_detail = df_detail.sort_values(by=["제품명", "생산일"]).reset_index(drop=True)
-            
-            remaining_list = []
-            for pname in df_detail["제품명"].unique():
-                sub = df_detail[df_detail["제품명"] == pname].copy()
-                unmatched_remain = prod_out_unmatched.get(pname, 0)
-                adj_total = prod_adj_unmatched.get(pname, 0)
-                
-                for idx, srow in sub.iterrows():
-                    # 1) 배치 매칭 출고 차감
-                    bkey = (pname, srow["생산일"], srow["소비기한"])
-                    matched_out = batch_out_map.get(bkey, 0)
-                    # 2) 배치 매칭 조정 반영
-                    matched_adj = batch_adj_map.get(bkey, 0)
-                    
-                    remain = srow["생산량"] - matched_out + matched_adj
-                    
-                    # 3) 배치 미지정(기존 데이터) FIFO 차감
-                    if unmatched_remain > 0 and remain > 0:
-                        if unmatched_remain >= remain:
-                            unmatched_remain -= remain
-                            remain = 0
-                        else:
-                            remain -= unmatched_remain
-                            unmatched_remain = 0
-                    
-                    remaining_list.append({
-                        "유형": srow["유형"],
-                        "제품명": srow["제품명"],
-                        "규격": srow["규격"],
-                        "생산일": srow["생산일"],
-                        "소비기한": srow["소비기한"],
-                        "생산량": srow["생산량"],
-                        "현재고": remain
-                    })
-                # 제품별 미지정 조정분은 마지막 행(최신 생산일)에 반영
-                if remaining_list and adj_total != 0:
-                    last_idx = len(remaining_list) - 1
-                    for ri in range(len(remaining_list)-1, -1, -1):
-                        if remaining_list[ri]["제품명"] == pname:
-                            last_idx = ri
-                            break
-                    remaining_list[last_idx]["현재고"] += adj_total
-            
-            df_detail_final = pd.DataFrame(remaining_list)
-            show_zero = st.checkbox("현재고 0인 항목도 표시", value=False)
-            if not show_zero:
-                df_detail_final = df_detail_final[df_detail_final["현재고"] > 0]
-            
-            df_detail_final = df_detail_final.sort_values(by=["유형", "제품명", "생산일"]).reset_index(drop=True)
-            
-            st.dataframe(
-                df_detail_final,
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "생산량": st.column_config.NumberColumn(format="%d"),
-                    "현재고": st.column_config.NumberColumn("현재고 (최종)", format="%d", help="배치별 출고 차감 + 미지정 출고 FIFO 차감"),
-                    "소비기한": st.column_config.TextColumn("소비기한"),
-                }
-            )
-        
-        st.divider()
-        st.markdown("#### 📋 제품별 총합 재고 현황")
-        if df_inv.empty:
-            st.info("재고를 산정할 데이터(생산 또는 출고량)가 존재하지 않습니다.")
-        else:
-            df_inv = df_inv.sort_values(by=["유형", "제품명"]).reset_index(drop=True)
-            st.dataframe(
-                df_inv, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "총생산량": st.column_config.NumberColumn(format="%d"),
-                    "총출고량": st.column_config.NumberColumn(format="%d"),
-                    "임의조정 누적분": st.column_config.NumberColumn(format="%d"),
-                    "현재고 (P)": st.column_config.NumberColumn("현재고 (최종)", format="%d", help="생산량 - 출고량 + 임의조정 누적분")
-                }
-            )
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("##### 🚨 재고 강제 영점 / 수정 패널")
-            st.error("주의사항: 전산 기록상 재고와 실제 물류창고 재고가 일치하지 않을 때, 전산상 숫자를 수정합니다. 관리자의 명백한 확인 후에만 사용 바랍니다.")
-            
-            with st.form("adj_inv_form", clear_on_submit=True):
-                # 상세 재고(배치별) 목록을 옵션으로 제공
-                if not df_detail_final.empty:
-                    adj_options = df_detail_final.apply(
-                        lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) | 생산일: {r['생산일']} | 소비기한: {r['소비기한']} — 전산재고: {r['현재고']}", 
-                        axis=1
-                    ).tolist()
-                else:
-                    adj_options = []
-                    
-                sel_item = st.selectbox("조정(수정)할 상세 배치 지정", ["선택해주세요"] + adj_options)
-                
-                c0, c1, c2 = st.columns([1,1,2])
-                with c1:
-                    actual_qty = st.number_input("조정 후 최종 실제재고 입력", min_value=0, step=1, value=0)
-                with c2:
-                    adj_reason = st.text_input("조정 사유", placeholder="예: 재고실사 불일치 (파손 2건), 누락 등")
-                
-                confirm_check = st.checkbox("해당 데이터 위변조/수정에 동의하며, 위 사유로 재고를 수정하겠습니다.")
-                submitted = st.form_submit_button("🔁 해당 배치 현재고 즉시 수정(저장)")
-                
-                if submitted:
-                    if sel_item == "선택해주세요":
-                        st.error("조정 폼목을 올바르게 선택해주세요.")
-                    elif not adj_reason.strip():
-                        st.error("비고/사유는 필수 입력 사항입니다.")
-                    elif not confirm_check:
-                        st.error("재고 수정 사항에 동의함 체커에 체크해주셔야 수정이 가능합니다.")
-                    else:
-                        match_idx = adj_options.index(sel_item)
-                        target_row = df_detail_final.iloc[match_idx]
-                        old_qty = target_row["현재고"]
-                        
-                        if actual_qty == old_qty:
-                            st.info("입력하신 수량과 이미 계산된 전산 재고가 같습니다. 별도 수정이 필요 없습니다.")
-                        else:
-                            diff = actual_qty - old_qty
-                            dir_str = "증가▲" if diff > 0 else "감소▼"
-                            
-                            new_adj = {
-                                "조정일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "유형": target_row["유형"],
-                                "제품명": target_row["제품명"],
-                                "규격": target_row["규격"],
-                                "생산일": target_row["생산일"],
-                                "소비기한": target_row["소비기한"],
-                                "기존재고": old_qty,
-                                "변경재고": actual_qty,
-                                "방향": dir_str,
-                                "차이": diff,
-                                "사유": adj_reason
-                            }
-                            df_adj = pd.concat([df_adj, pd.DataFrame([new_adj])], ignore_index=True)
-                            df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
-                            
-                            log_history("재고 수동조정", "재고 관리", f"{target_row['제품명']}({target_row['생산일']}) 수량수정( {old_qty} ➔ {actual_qty} ) 사유: {adj_reason}")
-                            st.success(f"경고: {target_row['제품명']} ({target_row['생산일']}) 배치의 전산 재고가 강제 {dir_str} 조정되었습니다!")
-                            st.rerun()
+    # ── 공통 데이터 로드 ──
+    df_data = load_data()
+    df_out = load_outbound_records()
+    df_adj = load_inventory_adj()
+    df_specs = load_specs()
+    
+    # ── 재고 계산 엔진 (상세 배치 데이터 생성) ──
+    # 1. 배치별 생산량 집계: key = (유형, 제품명, 규격, 생산일, 소비기한)
+    batch_prod = {}
+    for _, row in df_data.iterrows():
+        pn = str(row.get("제품명", "")).strip()
+        if pn in ["", "-", "None", "nan"]: continue
+        spec = str(row.get("규격", "-")).strip()
+        ptype = str(row.get("유형", "-")).strip()
+        pd_ = str(row.get("생산일", "")).strip()
+        exp_ = str(row.get("소비기한", "")).strip()
+        if exp_ in ["", "nan", "None"]: exp_ = "-"
+        bkey = (ptype, pn, spec, pd_, exp_)
+        batch_prod[bkey] = batch_prod.get(bkey, 0) + int(float(str(row.get("생산량", "0")).replace(",","")))
 
-            with st.expander("📝 누적 재고 조정 히스토리 보기", expanded=False):
-                if df_adj.empty:
-                    st.info("로딩된 임의조정 내역이 없습니다.")
+    # 2. 배치별 출고량 집계
+    batch_out = {}
+    prod_out_unmatched = {}
+    for _, row in df_out.iterrows():
+        pn = str(row.get("제품명", "")).strip()
+        if pn in ["", "-", "None", "nan"]: continue
+        spec = str(row.get("규격", "-")).strip()
+        mfg_date = str(row.get("제조일자", "")).strip()
+        exp_date = str(row.get("소비기한", "")).strip()
+        if mfg_date in ["", "nan", "None"]: mfg_date = ""
+        if exp_date in ["", "nan", "None"]: exp_date = "-"
+        qty = int(float(str(row.get("수량", "0")).replace(",","")))
+        
+        if mfg_date and mfg_date != "-":
+            bkey = (pn, spec, mfg_date, exp_date)
+            batch_out[bkey] = batch_out.get(bkey, 0) + qty
+        else:
+            prod_out_unmatched[pn] = prod_out_unmatched.get(pn, 0) + qty
+
+    # 3. 조정량 집계
+    batch_adj_map = {}
+    prod_adj_unmatched = {}
+    for _, row in df_adj.iterrows():
+        pn = str(row.get("제품명", "")).strip()
+        if pn in ["", "-", "None", "nan"]: continue
+        spec = str(row.get("규격", "-")).strip()
+        ptype = str(row.get("유형", "-")).strip()
+        pd_ = str(row.get("생산일", "")).strip()
+        exp_ = str(row.get("소비기한", "")).strip()
+        if exp_ in ["", "nan", "None"]: exp_ = "-"
+        diff = int(float(str(row.get("차이", "0")).replace(",","")))
+        
+        if pd_ and pd_ != "-":
+            bkey = (ptype, pn, spec, pd_, exp_)
+            batch_adj_map[bkey] = batch_adj_map.get(bkey, 0) + diff
+        else:
+            prod_adj_unmatched[pn] = prod_adj_unmatched.get(pn, 0) + diff
+
+    # 4. 최종 리스트 구성
+    all_bkeys = set(list(batch_prod.keys()) + list(batch_adj_map.keys()))
+    final_detail_list = []
+    
+    # 제품별 미지정 출고량(FIFO용) 복사본
+    unmatched_out_temp = prod_out_unmatched.copy()
+    
+    for bkey in sorted(all_bkeys, key=lambda x: (x[1], x[3])): # 제품명, 생산일 순
+        ptype, pn, spec, pd_, exp_ = bkey
+        p_qty = batch_prod.get(bkey, 0)
+        a_qty = batch_adj_map.get(bkey, 0)
+        o_qty = batch_out.get((pn, spec, pd_, exp_), 0)
+        
+        stock = p_qty - o_qty + a_qty
+        
+        # FIFO 미지정 출고 적용
+        if unmatched_out_temp.get(pn, 0) > 0 and stock > 0:
+            u_out = unmatched_out_temp[pn]
+            if u_out >= stock:
+                unmatched_out_temp[pn] -= stock
+                stock = 0
+            else:
+                stock -= u_out
+                unmatched_out_temp[pn] = 0
+                
+        final_detail_list.append({
+            "유형": ptype, "제품명": pn, "규격": spec, "생산일": pd_, "소비기한": exp_,
+            "생산량": p_qty, "조정분": a_qty, "출고량": o_qty, "현재고": stock
+        })
+
+    # 제품별 총합 요약
+    df_detail_final = pd.DataFrame(final_detail_list)
+    prod_summary = []
+    if not df_detail_final.empty:
+        for pn in df_detail_final["제품명"].unique():
+            sub = df_detail_final[df_detail_final["제품명"] == pn]
+            row0 = sub.iloc[0]
+            tot_p = sub["생산량"].sum()
+            tot_o = sub["출고량"].sum() + prod_out_unmatched.get(pn, 0)
+            tot_a = sub["조정분"].sum() + prod_adj_unmatched.get(pn, 0)
+            prod_summary.append({
+                "유형": row0["유형"], "제품명": pn, "규격": row0["규격"],
+                "총생산량": tot_p, "총출고량": tot_o, "임의조정": tot_a, "현재고": tot_p - tot_o + tot_a
+            })
+    df_summary = pd.DataFrame(prod_summary)
+
+    # ── 카테고리별 화면 구성 ──
+    if sub_menu == "현재고 현황":
+        st.markdown('<div class="section-title">📊 실시간 현재고 현황 및 리포트</div>', unsafe_allow_html=True)
+        
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            st.write("생산/출고/조정 데이터가 실시간으로 반영된 결과입니다. 오래된 선입 재고부터 자동 차감 계산됩니다.")
+        with c2:
+            if not df_detail_final.empty:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_detail_final.to_excel(writer, index=False, sheet_name='상세재고')
+                    df_summary.to_excel(writer, index=False, sheet_name='제품별요약')
+                st.download_button(
+                    label="📥 상세재고 엑셀 다운로드",
+                    data=output.getvalue(),
+                    file_name=f"Hollys_Inventory_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+        st.markdown("#### 📦 생산일 · 소비기한별 상세 재고")
+        show_zero = st.checkbox("현재고 0인 항목 포함", value=False)
+        df_v = df_detail_final.copy()
+        if not show_zero and not df_v.empty: df_v = df_v[df_v["현재고"] > 0]
+        
+        st.dataframe(df_v, use_container_width=True, hide_index=True, column_config={
+            "생산량": st.column_config.NumberColumn(format="%d"),
+            "출고량": st.column_config.NumberColumn(format="%d"),
+            "조정분": st.column_config.NumberColumn(format="%d"),
+            "현재고": st.column_config.NumberColumn("현재고 (최종)", format="%d", help="배치별 실재고")
+        })
+
+        st.divider()
+        st.markdown("#### 📈 제품별 총합 요약")
+        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+
+    elif sub_menu == "재고 조정 및 히스토리":
+        st.markdown('<div class="section-title">⚙️ 재고 강제 영점 조정 및 히스토리</div>', unsafe_allow_html=True)
+        
+        col_form, col_help = st.columns([2, 1])
+        with col_help:
+            st.info("💡 **알림**\n\n전산 데이터와 실제 창고 재고가 일치하지 않을 경우에만 사용하세요. 생산 이력이 없는 신규 품목도 직접 정보를 입력하여 재고를 강제 생성할 수 있습니다.")
+        
+        with col_form:
+            st.markdown("##### 🚨 재고 수동 조정 패널")
+            with st.form("adj_inv_form_v2", clear_on_submit=True):
+                mode = st.radio("조정 모드", ["기존 배치 수정", "미생산/신규 항목 강제 등록"], horizontal=True)
+                
+                if mode == "기존 배치 수정":
+                    if not df_detail_final.empty:
+                        adj_opts = df_detail_final.apply(
+                            lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) | {r['생산일']} | 잔여:{int(r['현재고'])}", axis=1
+                        ).tolist()
+                        sel_item = st.selectbox("수정할 배치 선택", ["선택하세요"] + adj_opts)
+                    else:
+                        st.warning("수정할 수 있는 배치가 없습니다.")
+                        sel_item = "선택하세요"
+                        
+                    c1, c2 = st.columns(2)
+                    with c1: target_qty = st.number_input("수정 후 최종 수량", min_value=0, step=1)
+                    with c2: adj_reason = st.text_input("조정 사유", placeholder="필수 입력")
+                    
                 else:
-                    # 삭제 기능을 위해 인덱스 포함 및 역순 정렬
-                    df_adj_view = df_adj.copy().reset_index()
-                    df_adj_view = df_adj_view.sort_values(by="조정일시", ascending=False)
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        p_opts = df_specs["제품명"].unique().tolist() if not df_specs.empty else []
+                        new_p = st.selectbox("제품 선택", ["직접 입력"] + p_opts)
+                        if new_p == "직접 입력": new_p = st.text_input("제품명 직접 입력")
+                        new_pd = st.date_input("생산일 지정", value=date.today())
+                    with c2:
+                        new_pt = st.selectbox("유형", ["캡슐커피", "스틱커피", "원두커피", "생두(원료)"])
+                        new_ps = st.text_input("규격", value="EA")
+                        new_exp = st.text_input("소비기한", placeholder="YYYY-MM-DD")
                     
-                    adj_cols = [0.8, 1.5, 1.2, 1.2, 1.5, 2.0, 0.5]
-                    adj_hdr = ["조정일시", "제품명", "생산일", "변경정보", "차이(방향)", "조정사유", "삭제"]
-                    
-                    hcols = st.columns(adj_cols)
-                    for hc, ht in zip(hcols, adj_hdr):
-                        hc.markdown(f"<div style='background:#f0f2f6;padding:5px;font-size:11px;font-weight:bold;text-align:center;'>{ht}</div>", unsafe_allow_html=True)
-                    
-                    for ri, arow in df_adj_view.iterrows():
-                        orig_idx = arow["index"]
-                        ac = st.columns(adj_cols)
-                        
-                        def scell(text, align="center"):
-                            return f"<div style='font-size:11px; text-align:{align}; padding:5px; border-bottom:1px solid #eee;'>{text}</div>"
-                        
-                        ac[0].markdown(scell(arow.get("조정일시","")[:16]), unsafe_allow_html=True)
-                        ac[1].markdown(scell(f"**{arow.get('제품명','')}**<br><span style='font-size:9px;color:grey;'>{arow.get('규격','')}</span>", "left"), unsafe_allow_html=True)
-                        ac[2].markdown(scell(arow.get("생산일","")), unsafe_allow_html=True)
-                        ac[3].markdown(scell(f"{arow.get('기존재고','')} ➔ {arow.get('변경재고','')}", "right"), unsafe_allow_html=True)
-                        diff_str = f"{arow.get('차이','')} ({arow.get('방향','')})"
-                        ac[4].markdown(scell(diff_str), unsafe_allow_html=True)
-                        ac[5].markdown(scell(arow.get("사유",""), "left"), unsafe_allow_html=True)
-                        
-                        if ac[6].button("삭제", key=f"del_adj_{orig_idx}"):
-                            # 원본 df_adj에서 해당 인덱스 삭제
-                            df_adj_new = df_adj.drop(orig_idx)
-                            df_adj_new.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
-                            st.success("조정 내역이 삭제되었습니다.")
-                            st.rerun()
+                    c3, c4 = st.columns(2)
+                    with c3: target_qty = st.number_input("등록할 재고 수량", min_value=0, step=1)
+                    with c4: adj_reason = st.text_input("등록 사유", value="신규 항목 강재 재고 등록")
+                
+                confirm = st.checkbox("데이터 위변조 및 수정 사항에 동의합니다.")
+                sub_btn = st.form_submit_button("🔁 재고 데이터 즉시 반영")
+                
+                if sub_btn:
+                    if not adj_reason.strip(): st.error("사유를 입력해주세요.")
+                    elif not confirm: st.error("동의 체커에 체크해주세요.")
+                    else:
+                        if mode == "기존 배치 수정":
+                            if sel_item == "선택하세요": st.error("배치를 선택해주세요.")
+                            else:
+                                o_idx = adj_opts.index(sel_item)
+                                target_row = df_detail_final.iloc[o_idx]
+                                diff = target_qty - target_row["현재고"]
+                                res_adj = {
+                                    "조정일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "유형": target_row["유형"], "제품명": target_row["제품명"], "규격": target_row["규격"],
+                                    "생산일": target_row["생산일"], "소비기한": target_row["소비기한"],
+                                    "기존재고": target_row["현재고"], "변경재고": target_qty, "방향": "▲" if diff > 0 else "▼",
+                                    "차이": diff, "사유": adj_reason
+                                }
+                                df_adj = pd.concat([df_adj, pd.DataFrame([res_adj])], ignore_index=True)
+                                df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                                st.success("재고 수정 완료!"); st.rerun()
+                        else:
+                            if not str(new_p).strip(): st.error("제품명을 입력해주세요.")
+                            else:
+                                res_adj = {
+                                    "조정일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "유형": new_pt, "제품명": str(new_p).strip(), "규격": new_ps,
+                                    "생산일": str(new_pd), "소비기한": new_exp if new_exp else "-",
+                                    "기존재고": 0, "변경재고": target_qty, "방향": "등록",
+                                    "차이": target_qty, "사유": adj_reason
+                                }
+                                df_adj = pd.concat([df_adj, pd.DataFrame([res_adj])], ignore_index=True)
+                                df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                                st.success("신규 재고 등록 완료!"); st.rerun()
+
+        st.divider()
+        st.markdown("#### 📝 누적 재고 조정 히스토리")
+        if df_adj.empty:
+            st.info("기록된 조정 내역이 없습니다.")
+        else:
+            df_adj_view = df_adj.copy().reset_index().sort_values(by="조정일시", ascending=False)
+            adj_cols = [1, 1.5, 1, 1.5, 1.5, 2, 0.5]
+            adj_hdr = ["조정일시", "제품명", "생산일", "변경전후", "차이", "사유", "삭제"]
+            hcols = st.columns(adj_cols)
+            for hc, ht in zip(hcols, adj_hdr): hc.markdown(f"<div style='background:#f0f2f6;padding:5px;font-size:11px;font-weight:bold;text-align:center;'>{ht}</div>", unsafe_allow_html=True)
+            for _, arow in df_adj_view.iterrows():
+                ac = st.columns(adj_cols)
+                def scell(t, al="center"): return f"<div style='font-size:11px;text-align:{al};padding:5px;border-bottom:1px solid #eee;'>{t}</div>"
+                ac[0].markdown(scell(arow.get("조정일시","")[:16]), unsafe_allow_html=True)
+                ac[1].markdown(scell(f"**{arow.get('제품명','')}**", "left"), unsafe_allow_html=True)
+                ac[2].markdown(scell(arow.get("생산일","")), unsafe_allow_html=True)
+                ac[3].markdown(scell(f"{arow.get('기존재고','')} ➔ {arow.get('변경재고','')}"), unsafe_allow_html=True)
+                ac[4].markdown(scell(f"{arow.get('차이','')} ({arow.get('방향','')})"), unsafe_allow_html=True)
+                ac[5].markdown(scell(arow.get("사유",""), "left"), unsafe_allow_html=True)
+                if ac[6].button("❌", key=f"del_adj_{arow['index']}"):
+                    df_adj.drop(arow['index']).to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                    st.success("삭제 완료!"); st.rerun()
 
 # --- 출고 관리 메뉴 ---
 elif menu_selection == "출고 관리":
