@@ -439,7 +439,7 @@ def load_specs():
                     df.insert(3, "규격", "EA") 
             return df
         except Exception: pass
-    return pd.DataFrame(columns=["제품코드", "제품명", "유형", "규격", "최소_질소", "최대_질소", "최소_수분", "최대_수분", "최소_색도", "최대_색도", "최소_추출", "최대_추출", "날짜유형"])
+    return pd.DataFrame(columns=["제품코드", "제품명", "유형", "규격", "최소_질소", "최대_질소", "최소_수분", "최대_수분", "최소_색도", "최대_색도", "최소_추출", "최대_추출", "날짜유형", "날짜기록"])
 
 def load_cleaning_specs():
     if os.path.exists(CLEAN_FILE): 
@@ -1477,7 +1477,8 @@ elif menu_selection == "제품 관리":
                             max_col if max_col is not None else "N/A",
                             min_ext if min_ext is not None else "N/A",
                             max_ext if max_ext is not None else "N/A",
-                            date_type
+                            date_type,
+                            datetime.now().strftime("%Y-%m-%d")
                         ]], columns=df_specs.columns)
                         
                         # 동일 코드가 이미 있다면 업데이트, 없으면 추가
