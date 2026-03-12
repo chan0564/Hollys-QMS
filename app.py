@@ -4275,11 +4275,42 @@ elif menu_selection == "재고 관리":
                             st.success(f"경고: {target_row['제품명']} ({target_row['생산일']}) 배치의 전산 재고가 강제 {dir_str} 조정되었습니다!")
                             st.rerun()
 
-            with st.expander("📝 누적 재고 조정 히스토리 보기"):
+            with st.expander("📝 누적 재고 조정 히스토리 보기", expanded=False):
                 if df_adj.empty:
                     st.info("로딩된 임의조정 내역이 없습니다.")
                 else:
-                    st.dataframe(df_adj.sort_values(by="조정일시", ascending=False), use_container_width=True, hide_index=True)
+                    # 삭제 기능을 위해 인덱스 포함 및 역순 정렬
+                    df_adj_view = df_adj.copy().reset_index()
+                    df_adj_view = df_adj_view.sort_values(by="조정일시", ascending=False)
+                    
+                    adj_cols = [0.8, 1.5, 1.2, 1.2, 1.5, 2.0, 0.5]
+                    adj_hdr = ["조정일시", "제품명", "생산일", "변경정보", "차이(방향)", "조정사유", "삭제"]
+                    
+                    hcols = st.columns(adj_cols)
+                    for hc, ht in zip(hcols, adj_hdr):
+                        hc.markdown(f"<div style='background:#f0f2f6;padding:5px;font-size:11px;font-weight:bold;text-align:center;'>{ht}</div>", unsafe_allow_html=True)
+                    
+                    for ri, arow in df_adj_view.iterrows():
+                        orig_idx = arow["index"]
+                        ac = st.columns(adj_cols)
+                        
+                        def scell(text, align="center"):
+                            return f"<div style='font-size:11px; text-align:{align}; padding:5px; border-bottom:1px solid #eee;'>{text}</div>"
+                        
+                        ac[0].markdown(scell(arow.get("조정일시","")[:16]), unsafe_allow_html=True)
+                        ac[1].markdown(scell(f"**{arow.get('제품명','')}**<br><span style='font-size:9px;color:grey;'>{arow.get('규격','')}</span>", "left"), unsafe_allow_html=True)
+                        ac[2].markdown(scell(arow.get("생산일","")), unsafe_allow_html=True)
+                        ac[3].markdown(scell(f"{arow.get('기존재고','')} ➔ {arow.get('변경재고','')}", "right"), unsafe_allow_html=True)
+                        diff_str = f"{arow.get('차이','')} ({arow.get('방향','')})"
+                        ac[4].markdown(scell(diff_str), unsafe_allow_html=True)
+                        ac[5].markdown(scell(arow.get("사유",""), "left"), unsafe_allow_html=True)
+                        
+                        if ac[6].button("삭제", key=f"del_adj_{orig_idx}"):
+                            # 원본 df_adj에서 해당 인덱스 삭제
+                            df_adj_new = df_adj.drop(orig_idx)
+                            df_adj_new.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
+                            st.success("조정 내역이 삭제되었습니다.")
+                            st.rerun()
 
 # --- 출고 관리 메뉴 ---
 elif menu_selection == "출고 관리":
