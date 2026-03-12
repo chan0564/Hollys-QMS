@@ -1864,17 +1864,29 @@ elif menu_selection == "제품 관리":
     elif sub_menu == "데이터 히스토리":
         st.subheader("데이터 히스토리 및 일일 생산량 관리")
         df_specs = load_specs()
-        top1, top2, top3 = st.columns([2, 3, 1.5])
+        top1, top2, top3, top4 = st.columns([2, 2, 3, 1.5])
         with top1:
             sel_date_input = st.date_input("📅 생산일", value=date.today(), key="hist_date_pick")
             selected_date  = str(sel_date_input)
+        
         with top2:
+            if df_specs.empty:
+                sel_type = "전체"
+            else:
+                type_list = ["전체"] + sorted(df_specs["유형"].dropna().unique().tolist())
+                sel_type = st.selectbox("유형 선택", type_list, key="hist_type_pick")
+                
+        with top3:
             if df_specs.empty:
                 st.info("먼저 '간편 판정 규격'에서 제품을 등록하세요.")
                 add_prod = ""
             else:
-                add_prod = st.selectbox("제품 선택", [""] + df_specs["제품명"].tolist(), key="hist_prod_pick")
-        with top3:
+                if sel_type == "전체":
+                    p_list = df_specs["제품명"].tolist()
+                else:
+                    p_list = df_specs[df_specs["유형"] == sel_type]["제품명"].tolist()
+                add_prod = st.selectbox("제품 선택", [""] + p_list, key="hist_prod_pick")
+        with top4:
             st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
             add_clicked = st.button("추가", use_container_width=True, type="primary")
         if add_clicked:
@@ -4312,19 +4324,20 @@ elif menu_selection == "출고 관리":
                         st.session_state.outbound_row_count -= 1
                         st.rerun()
 
-            # ── 배치별 재고 계산 (생산일+소비기한 기준) ──
+            # ── 배치별 재고 계산 (제품명+규격+생산일+소비기한 기준) ──
             df_data_for_inv = load_data()
             df_adj_for_inv = load_inventory_adj()
             
-            # 배치별 생산량 집계: key = (제품명, 생산일, 소비기한)
+            # 배치별 생산량 집계: key = (제품명, 규격, 생산일, 소비기한)
             batch_prod = {}
             for _, row in df_data_for_inv.iterrows():
                 pn = str(row.get("제품명", "")).strip()
                 if pn in ["", "-", "None", "nan"]: continue
+                spec = str(row.get("규격", "-")).strip()
                 pd_ = str(row.get("생산일", "")).strip()
                 exp_ = str(row.get("소비기한", "")).strip()
                 if exp_ in ["", "nan", "None", "NaT"]: exp_ = "-"
-                bkey = (pn, pd_, exp_)
+                bkey = (pn, spec, pd_, exp_)
                 if bkey not in batch_prod: batch_prod[bkey] = 0
                 try: batch_prod[bkey] += int(float(str(row.get("생산량", "0")).replace(",","")))
                 except: pass
@@ -4334,115 +4347,127 @@ elif menu_selection == "출고 관리":
             for _, row in df_out.iterrows():
                 pn = str(row.get("제품명", "")).strip()
                 if pn in ["", "-", "None", "nan"]: continue
+                spec = str(row.get("규격", "-")).strip()
                 pd_ = str(row.get("제조일자", "")).strip()
                 exp_ = str(row.get("소비기한", "")).strip()
                 if pd_ in ["", "nan", "None"]: pd_ = "-"
                 if exp_ in ["", "nan", "None"]: exp_ = "-"
-                bkey = (pn, pd_, exp_)
+                bkey = (pn, spec, pd_, exp_)
                 if bkey not in batch_out: batch_out[bkey] = 0
                 try: batch_out[bkey] += int(float(str(row.get("수량", "0")).replace(",","")))
                 except: pass
             
-            # 조정량 (제품명 기준)
-            prod_adj = {}
+            # 배치별 조정량 가산
+            batch_adj = {}
+            prod_adj_unmatched = {} # 하위 호환성 (제품명 단위 조정)
             for _, row in df_adj_for_inv.iterrows():
                 pn = str(row.get("제품명", "")).strip()
                 if pn in ["", "-", "None", "nan"]: continue
-                if pn not in prod_adj: prod_adj[pn] = 0
-                try: prod_adj[pn] += int(float(str(row.get("차이", "0")).replace(",","")))
-                except: pass
+                spec = str(row.get("규격", "-")).strip()
+                pd_ = str(row.get("생산일", "")).strip()
+                exp_ = str(row.get("소비기한", "")).strip()
+                if exp_ in ["", "nan", "None"]: exp_ = "-"
+                try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
+                except: diff = 0
+                
+                if pd_ and pd_ != "-":
+                    bkey = (pn, spec, pd_, exp_)
+                    batch_adj[bkey] = batch_adj.get(bkey, 0) + diff
+                else:
+                    prod_adj_unmatched[pn] = prod_adj_unmatched.get(pn, 0) + diff
             
-            # 배치별 현재고 산출
+            # 배치별 최종 현재고 산출
             batch_stock = {}
             for bkey, pqty in batch_prod.items():
                 oqty = batch_out.get(bkey, 0)
-                remain = pqty - oqty
+                aqty = batch_adj.get(bkey, 0)
+                remain = pqty - oqty + aqty
                 batch_stock[bkey] = remain
-            # 제품명별 총 현재고
+            
+            # 제품명별 총 현재고 (요약용)
             cur_inv_by_prod = {}
             for bkey, remain in batch_stock.items():
                 pn = bkey[0]
                 if pn not in cur_inv_by_prod: cur_inv_by_prod[pn] = 0
                 cur_inv_by_prod[pn] += remain
-            # 조정분 가산
-            for pn, adj in prod_adj.items():
+            # 제품명 단위 미지정 조정분 가산
+            for pn, adj in prod_adj_unmatched.items():
                 if pn not in cur_inv_by_prod: cur_inv_by_prod[pn] = 0
                 cur_inv_by_prod[pn] += adj
+                # FIFO로 마지막 배치에 가산 (표시용)
+                matching_batches = [k for k in batch_stock.keys() if k[0] == pn]
+                if matching_batches:
+                    last_b = sorted(matching_batches, key=lambda x: x[2])[-1]
+                    batch_stock[last_b] += adj
 
             out_items = []
             for i in range(st.session_state.outbound_row_count):
-                st.markdown(f"---")
-                row1_c0, row1_c1, row1_c2 = st.columns([1.5, 3, 1.5])
-                with row1_c0:
+                st.markdown(f"**품목 #{i+1}**")
+                row1_c1, row1_c2, row1_c3 = st.columns([1.5, 3, 1.5])
+                with row1_c1:
                     type_opts = ["선택 안함"] + (df_p_list['유형'].dropna().unique().tolist() if not df_p_list.empty else [])
                     sel_t = st.selectbox(f"유형 ({i+1})", type_opts, key=f"ob_t_{i}")
-                with row1_c1:
+                with row1_c2:
                     if sel_t != "선택 안함" and not df_p_list.empty:
                         p_opts = df_p_list[df_p_list['유형'] == sel_t]['제품명'].dropna().unique().tolist()
                     else:
                         p_opts = p_names
                     sel_p = st.selectbox(f"제품명 ({i+1})", ["선택 안함"] + p_opts, key=f"ob_p_{i}")
-                with row1_c2:
+                with row1_c3:
                     cur_val = 0
                     if sel_p != "선택 안함" and str(sel_p).strip() != "":
                         cur_val = cur_inv_by_prod.get(str(sel_p).strip(), 0)
-                    st.text_input(f"총 현재고 ({i+1})", value=f"{cur_val} 개", disabled=True, key=f"ob_cur_{i}")
+                    st.text_input(f"총 전산재고 ({i+1})", value=f"{cur_val} 개", disabled=True, key=f"ob_cur_{i}")
                 
-                # 배치(제조일자+소비기한) 선택
-                row2_c0, row2_c1, row2_c2, row2_c3 = st.columns([2.5, 1.5, 1.5, 2])
+                # 배치(규격+제조일자+소비기한) 선택
+                row2_c1, row2_c2, row2_c3 = st.columns([4, 1, 1])
+                sel_batch_spec = "-"
                 sel_batch_date = ""
                 sel_batch_exp = ""
-                with row2_c0:
+                with row2_c1:
                     if sel_p != "선택 안함" and str(sel_p).strip() != "":
-                        # 해당 제품의 재고가 있는 배치 목록 생성
+                        # 해당 제품의 재고가 있는 배치 목록 생성 (규격 정보 포함)
                         avail_batches = []
                         for bkey, remain in batch_stock.items():
                             if bkey[0] == str(sel_p).strip() and remain > 0:
-                                avail_batches.append({"제조일자": bkey[1], "소비기한": bkey[2], "잔여": remain})
-                        avail_batches.sort(key=lambda x: x["제조일자"])
+                                avail_batches.append({
+                                    "규격": bkey[1],
+                                    "제조일자": bkey[2],
+                                    "소비기한": bkey[3],
+                                    "잔여": remain
+                                })
+                        avail_batches.sort(key=lambda x: (x["제조일자"], x["규격"]))
                         
                         if avail_batches:
-                            batch_labels = [f"{b['제조일자']} | 소비기한: {b['소비기한']} (잔여: {b['잔여']}개)" for b in avail_batches]
-                            sel_batch = st.selectbox(f"배치(제조일+소비기한) 선택 ({i+1})", ["선택 안함"] + batch_labels, key=f"ob_batch_{i}")
+                            batch_labels = [f"[{b['규격']}] {b['제조일자']} | 소비기한: {b['소비기한']} (잔여: {b['잔여']}개)" for b in avail_batches]
+                            sel_batch = st.selectbox(f"출고 배치(규격/제조일/소비기한) 선택 ({i+1})", ["선택 안함"] + batch_labels, key=f"ob_batch_{i}")
                             if sel_batch != "선택 안함":
                                 bidx = batch_labels.index(sel_batch)
+                                sel_batch_spec = avail_batches[bidx]["규격"]
                                 sel_batch_date = avail_batches[bidx]["제조일자"]
                                 sel_batch_exp = avail_batches[bidx]["소비기한"]
                         else:
                             st.info(f"'{sel_p}' 재고 배치가 없습니다.")
                     else:
-                        st.selectbox(f"배치 선택 ({i+1})", ["제품을 먼저 선택하세요"], key=f"ob_batch_{i}", disabled=True)
+                        st.selectbox(f"배치를 선택하세요 ({i+1})", ["제품을 먼저 선택하세요"], key=f"ob_batch_{i}", disabled=True)
                 
-                with row2_c1:
-                    if sel_p != "선택 안함" and not df_p_list.empty:
-                        u_opts = df_p_list[df_p_list['제품명'] == sel_p]['규격'].dropna().unique().tolist()
-                        if sel_t == "선택 안함":
-                            guess_t = df_p_list[df_p_list['제품명'] == sel_p]['유형'].dropna().tolist()
-                            if guess_t: sel_t = guess_t[0]
-                    else:
-                        u_opts = []
-                    if u_opts:
-                        sel_u = st.selectbox(f"규격 ({i+1})", u_opts, key=f"ob_u_{i}")
-                    else:
-                        sel_u = st.text_input(f"규격 ({i+1})", key=f"ob_u_{i}")
-                
-                with row2_c1:
-                    pass  # 이미 위에서 처리
                 with row2_c2:
-                    qty = st.number_input(f"수량 ({i+1})", min_value=0, step=1, key=f"ob_q_{i}")
+                    qty = st.number_input(f"출고수량 ({i+1})", min_value=0, step=1, key=f"ob_q_{i}")
                 with row2_c3:
                     note = st.text_input(f"비고 ({i+1})", key=f"ob_n_{i}")
                 
                 if sel_p != "선택 안함" and str(sel_p).strip() != "" and qty > 0:
+                    # 규격 자동 선택 (배치에서 가져옴)
                     out_items.append({
                         "유형": sel_t if sel_t != "선택 안함" else "-",
                         "제품명": sel_p,
-                        "규격": sel_u,
+                        "규격": sel_batch_spec,
                         "제조일자": sel_batch_date,
                         "소비기한": sel_batch_exp,
                         "수량": str(qty),
                         "비고": note
                     })
+                st.markdown("---")
 
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🚀 출고 데이터 일괄 등록", type="primary", use_container_width=True):
