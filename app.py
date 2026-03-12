@@ -417,9 +417,13 @@ def load_outbound_records():
     return pd.DataFrame(columns=cols)
 
 def load_inventory_adj():
-    cols = ["조정일시", "유형", "제품명", "규격", "기존재고", "변경재고", "방향", "차이", "사유"]
+    cols = ["조정일시", "유형", "제품명", "규격", "생산일", "소비기한", "기존재고", "변경재고", "방향", "차이", "사유"]
     if os.path.exists(INVENTORY_ADJ_FILE):
-        try: return pd.read_csv(INVENTORY_ADJ_FILE, dtype=str)
+        try: 
+            df = pd.read_csv(INVENTORY_ADJ_FILE, dtype=str)
+            for c in cols:
+                if c not in df.columns: df[c] = ""
+            return df[cols]
         except Exception: pass
     return pd.DataFrame(columns=cols)
 
@@ -4082,13 +4086,23 @@ elif menu_selection == "재고 관리":
                 if prod_name not in prod_out_unmatched: prod_out_unmatched[prod_name] = 0
                 prod_out_unmatched[prod_name] += out_qty
         
-        # 조정량 (제품별)
-        prod_adj_total = {}
+        # 조정량 (배치별 및 제품별)
+        batch_adj_map = {} # (제품명, 생산일, 소비기한) -> 조정수량
+        prod_adj_unmatched = {} # 제품명 -> 조정수량 (생산일 정보 없을 때)
         for _, row in df_adj.iterrows():
-            prod_name = str(row.get("제품명", "")).strip()
-            if prod_name not in prod_adj_total: prod_adj_total[prod_name] = 0
-            try: prod_adj_total[prod_name] += int(float(str(row.get("차이", "0")).replace(",","")))
-            except: pass
+            pn = str(row.get("제품명", "")).strip()
+            if pn in ["", "-", "None", "nan"]: continue
+            pd_ = str(row.get("생산일", "")).strip()
+            exp_ = str(row.get("소비기한", "")).strip()
+            if exp_ in ["", "nan", "None"]: exp_ = "-"
+            try: diff = int(float(str(row.get("차이", "0")).replace(",","")))
+            except: diff = 0
+            
+            if pd_ and pd_ != "-":
+                bkey = (pn, pd_, exp_)
+                batch_adj_map[bkey] = batch_adj_map.get(bkey, 0) + diff
+            else:
+                prod_adj_unmatched[pn] = prod_adj_unmatched.get(pn, 0) + diff
         
         detail_list = []
         for dkey, dval in detail_inv.items():
@@ -4111,16 +4125,18 @@ elif menu_selection == "재고 관리":
             for pname in df_detail["제품명"].unique():
                 sub = df_detail[df_detail["제품명"] == pname].copy()
                 unmatched_remain = prod_out_unmatched.get(pname, 0)
-                adj_total = prod_adj_total.get(pname, 0)
+                adj_total = prod_adj_unmatched.get(pname, 0)
                 
                 for idx, srow in sub.iterrows():
-                    prod_qty = srow["생산량"]
                     # 1) 배치 매칭 출고 차감
                     bkey = (pname, srow["생산일"], srow["소비기한"])
                     matched_out = batch_out_map.get(bkey, 0)
-                    remain = prod_qty - matched_out
+                    # 2) 배치 매칭 조정 반영
+                    matched_adj = batch_adj_map.get(bkey, 0)
                     
-                    # 2) 배치 미지정(기존 데이터) FIFO 차감
+                    remain = srow["생산량"] - matched_out + matched_adj
+                    
+                    # 3) 배치 미지정(기존 데이터) FIFO 차감
                     if unmatched_remain > 0 and remain > 0:
                         if unmatched_remain >= remain:
                             unmatched_remain -= remain
@@ -4138,7 +4154,7 @@ elif menu_selection == "재고 관리":
                         "생산량": srow["생산량"],
                         "현재고": remain
                     })
-                # 조정분은 마지막 행(최신 생산일)에 반영
+                # 제품별 미지정 조정분은 마지막 행(최신 생산일)에 반영
                 if remaining_list and adj_total != 0:
                     last_idx = len(remaining_list) - 1
                     for ri in range(len(remaining_list)-1, -1, -1):
@@ -4188,8 +4204,16 @@ elif menu_selection == "재고 관리":
             st.error("주의사항: 전산 기록상 재고와 실제 물류창고 재고가 일치하지 않을 때, 전산상 숫자를 수정합니다. 관리자의 명백한 확인 후에만 사용 바랍니다.")
             
             with st.form("adj_inv_form", clear_on_submit=True):
-                options = df_inv.apply(lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) — 전산재고: {r['현재고 (P)']}", axis=1).tolist()
-                sel_item = st.selectbox("조정(수정)할 품목 지정", ["선택해주세요"] + options)
+                # 상세 재고(배치별) 목록을 옵션으로 제공
+                if not df_detail_final.empty:
+                    adj_options = df_detail_final.apply(
+                        lambda r: f"[{r['유형']}] {r['제품명']} ({r['규격']}) | 생산일: {r['생산일']} | 소비기한: {r['소비기한']} — 전산재고: {r['현재고']}", 
+                        axis=1
+                    ).tolist()
+                else:
+                    adj_options = []
+                    
+                sel_item = st.selectbox("조정(수정)할 상세 배치 지정", ["선택해주세요"] + adj_options)
                 
                 c0, c1, c2 = st.columns([1,1,2])
                 with c1:
@@ -4198,7 +4222,7 @@ elif menu_selection == "재고 관리":
                     adj_reason = st.text_input("조정 사유", placeholder="예: 재고실사 불일치 (파손 2건), 누락 등")
                 
                 confirm_check = st.checkbox("해당 데이터 위변조/수정에 동의하며, 위 사유로 재고를 수정하겠습니다.")
-                submitted = st.form_submit_button("🔁 현재고 즉시 수정(저장)")
+                submitted = st.form_submit_button("🔁 해당 배치 현재고 즉시 수정(저장)")
                 
                 if submitted:
                     if sel_item == "선택해주세요":
@@ -4208,9 +4232,9 @@ elif menu_selection == "재고 관리":
                     elif not confirm_check:
                         st.error("재고 수정 사항에 동의함 체커에 체크해주셔야 수정이 가능합니다.")
                     else:
-                        match_idx = options.index(sel_item)
-                        target_row = df_inv.iloc[match_idx]
-                        old_qty = target_row["현재고 (P)"]
+                        match_idx = adj_options.index(sel_item)
+                        target_row = df_detail_final.iloc[match_idx]
+                        old_qty = target_row["현재고"]
                         
                         if actual_qty == old_qty:
                             st.info("입력하신 수량과 이미 계산된 전산 재고가 같습니다. 별도 수정이 필요 없습니다.")
@@ -4223,6 +4247,8 @@ elif menu_selection == "재고 관리":
                                 "유형": target_row["유형"],
                                 "제품명": target_row["제품명"],
                                 "규격": target_row["규격"],
+                                "생산일": target_row["생산일"],
+                                "소비기한": target_row["소비기한"],
                                 "기존재고": old_qty,
                                 "변경재고": actual_qty,
                                 "방향": dir_str,
@@ -4232,8 +4258,8 @@ elif menu_selection == "재고 관리":
                             df_adj = pd.concat([df_adj, pd.DataFrame([new_adj])], ignore_index=True)
                             df_adj.to_csv(INVENTORY_ADJ_FILE, index=False, encoding='utf-8-sig')
                             
-                            log_history("재고 수동조정", "재고 관리", f"{target_row['제품명']} 수량수정( {old_qty} ➔ {actual_qty} ) 사유: {adj_reason}")
-                            st.success(f"경고: {target_row['제품명']} 제품의 전산 재고가 강제 {dir_str} 조정되었습니다!")
+                            log_history("재고 수동조정", "재고 관리", f"{target_row['제품명']}({target_row['생산일']}) 수량수정( {old_qty} ➔ {actual_qty} ) 사유: {adj_reason}")
+                            st.success(f"경고: {target_row['제품명']} ({target_row['생산일']}) 배치의 전산 재고가 강제 {dir_str} 조정되었습니다!")
                             st.rerun()
 
             with st.expander("📝 누적 재고 조정 히스토리 보기"):
