@@ -390,7 +390,7 @@ CLEAN_CATEGORIES = [
 ]
 
 def load_data():
-    cols = ["생산일", "유형", "제품명", "생산량", "규격", "질소(%)", "수분(%)", "색도(Agtron)", "추출시간(sec)", "추출시간_상세", "날짜기록", "판정", "비고"]
+    cols = ["생산일", "유형", "제품명", "생산량", "소비기한", "규격", "질소(%)", "수분(%)", "색도(Agtron)", "추출시간(sec)", "추출시간_상세", "날짜기록", "판정", "비고"]
     if os.path.exists(DATA_FILE): 
         try: 
             df = pd.read_csv(DATA_FILE)
@@ -1884,7 +1884,7 @@ elif menu_selection == "제품 관리":
                 
                 new_row = {
                     "생산일": selected_date, "유형": str(sr.get("유형","")),
-                    "제품명": add_prod, "생산량": 0, "규격": default_spec,
+                    "제품명": add_prod, "생산량": 0, "소비기한": "", "규격": default_spec,
                     "질소(%)": None, "수분(%)": None, "색도(Agtron)": None,
                     "추출시간(sec)": None, "추출시간_상세": None,
                     "날짜기록": None, "판정": None, "비고": ""
@@ -1913,8 +1913,8 @@ elif menu_selection == "제품 관리":
                 f"height:38px{_css_imp}; font-size:11px{_css_imp}; padding:4px 6px{_css_imp}; }}"
                 f"</style>",
                 unsafe_allow_html=True)
-            COLS = [0.3, 1.0, 0.8, 2.0, 0.9, 1.2, 0.7, 0.7, 0.8, 1.0, 0.7, 1.0, 1.0, 0.6]
-            HDR  = ["#","생산일","유형","제품명","생산량","규격","질소(%)","수분(%)","색도","추출시간","판정","비고","측정기록","삭제"]
+            COLS = [0.3, 1.0, 0.8, 2.0, 0.9, 1.1, 1.2, 0.7, 0.7, 0.8, 1.0, 0.7, 1.0, 1.0, 0.6]
+            HDR  = ["#","생산일","유형","제품명","생산량","소비기한","규격","질소(%)","수분(%)","색도","추출시간","판정","비고","측정기록","삭제"]
             hdr_cols = st.columns(COLS)
             for hc, ht in zip(hdr_cols, HDR):
                 hc.markdown(f"<div style='background:#1F4E79;color:white;padding:6px 2px;font-size:11px;font-weight:bold;text-align:center;border-radius:3px;margin-bottom:2px;'>{ht}</div>", unsafe_allow_html=True)
@@ -1943,6 +1943,10 @@ elif menu_selection == "제품 관리":
                 except: qty_val = 0
                 new_qty  = rc[4].number_input("", value=qty_val, min_value=0, step=1, key=f"qty_{ri}_{orig_idx}", label_visibility="collapsed")
                 
+                # 소비기한 입력 (생산량 옆)
+                cur_exp = str(frow.get("소비기한","")).replace("nan","").replace("None","").strip()
+                new_exp = rc[5].text_input("", value=cur_exp, key=f"exp_{ri}_{orig_idx}", label_visibility="collapsed", placeholder="예: 2026-06-30")
+                
                 # 제품 규격 연동 selectbox
                 cur_prod_specs_str = ""
                 if not df_specs.empty and pname in df_specs["제품명"].values:
@@ -1957,22 +1961,22 @@ elif menu_selection == "제품 관리":
                 except: 
                     def_spec_idx = 0
                 
-                new_spec = rc[5].selectbox("", cur_specs_list, index=def_spec_idx, key=f"spec_{ri}_{orig_idx}", label_visibility="collapsed")
+                new_spec = rc[6].selectbox("", cur_specs_list, index=def_spec_idx, key=f"spec_{ri}_{orig_idx}", label_visibility="collapsed")
                 for ci2, col_key in enumerate(["질소(%)","수분(%)","색도(Agtron)","추출시간(sec)"]):
                     v = str(frow.get(col_key,""))
                     v = "" if v in ["None","nan"] else v
-                    rc[6+ci2].markdown(rcell(v), unsafe_allow_html=True)
-                rc[10].markdown(rcell(판정, bg=판정_bg, fc=판정_fc), unsafe_allow_html=True)
-                new_note = rc[11].text_input("", value=str(frow.get("비고","")).replace("nan",""), key=f"note_{ri}_{orig_idx}", label_visibility="collapsed")
+                    rc[7+ci2].markdown(rcell(v), unsafe_allow_html=True)
+                rc[11].markdown(rcell(판정, bg=판정_bg, fc=판정_fc), unsafe_allow_html=True)
+                new_note = rc[12].text_input("", value=str(frow.get("비고","")).replace("nan",""), key=f"note_{ri}_{orig_idx}", label_visibility="collapsed")
                 cur_sel = st.session_state.get("hist_meas_prod","")
                 is_open = (cur_sel == f"{pname}__{ri}")
                 if 판정 in ("PASS","FAIL"): btn_label, btn_type = "입력완료","secondary"
                 elif is_open:              btn_label, btn_type = "닫기",    "secondary"
                 else:                      btn_label, btn_type = "입력",    "primary"
-                if rc[12].button(btn_label, key=f"mbtn_{ri}_{orig_idx}", use_container_width=True, type=btn_type):
+                if rc[13].button(btn_label, key=f"mbtn_{ri}_{orig_idx}", use_container_width=True, type=btn_type):
                     st.session_state["hist_meas_prod"] = "" if is_open else f"{pname}__{ri}"
                     st.rerun()
-                if rc[13].button("삭제", key=f"del_{ri}_{orig_idx}", use_container_width=True):
+                if rc[14].button("삭제", key=f"del_{ri}_{orig_idx}", use_container_width=True):
                     st.session_state[f"del_confirm_{orig_idx}"] = True
                 if st.session_state.get(f"del_confirm_{orig_idx}", False):
                     st.warning(f"**{pname}** 행을 삭제하시겠습니까?")
@@ -1984,7 +1988,7 @@ elif menu_selection == "제품 관리":
                         st.session_state["hist_meas_prod"] = ""; st.rerun()
                     if dc2.button("취소", key=f"del_cancel_{orig_idx}"):
                         st.session_state.pop(f"del_confirm_{orig_idx}", None); st.rerun()
-                edited_rows.append({**{c: frow.get(c) for c in df.columns}, "생산량": new_qty, "규격": new_spec, "비고": new_note})
+                edited_rows.append({**{c: frow.get(c) for c in df.columns}, "생산량": new_qty, "소비기한": new_exp, "규격": new_spec, "비고": new_note})
             edited_filtered_df = pd.DataFrame(edited_rows)
             if st.button(f"{selected_date} 저장", type="primary"):
                 df = df[~mask]
@@ -3994,8 +3998,8 @@ elif menu_selection == "재고 관리":
         df_out = load_outbound_records()
         df_adj = load_inventory_adj()
         
+        # ── 1) 제품별 총합 재고 (기존 방식, 영점조정용) ──
         inv_dict = {}
-        # 1. 생산량 누적
         for _, row in df_data.iterrows():
             if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
             key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
@@ -4004,7 +4008,6 @@ elif menu_selection == "재고 관리":
             except: qty = 0
             inv_dict[key]["총생산량"] += qty
             
-        # 2. 출고량 차감
         for _, row in df_out.iterrows():
             if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
             key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
@@ -4013,7 +4016,6 @@ elif menu_selection == "재고 관리":
             except: qty = 0
             inv_dict[key]["총출고량"] += qty
             
-        # 3. 누적 임의 조정치 적용
         for _, row in df_adj.iterrows():
             key = (str(row.get("유형", "None")).strip(), str(row.get("제품명", "")).strip(), str(row.get("규격", "None")).strip())
             if key not in inv_dict: inv_dict[key] = {"총생산량": 0, "총출고량": 0, "조정수량": 0}
@@ -4035,6 +4037,115 @@ elif menu_selection == "재고 관리":
             })
             
         df_inv = pd.DataFrame(inv_list)
+        
+        # ── 2) 생산일 + 소비기한 기준 상세 재고 ──
+        st.markdown("#### 📊 생산일 · 소비기한별 상세 재고")
+        detail_inv = {}
+        for _, row in df_data.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            prod_date = str(row.get("생산일", "")).strip()
+            exp_date = str(row.get("소비기한", "")).strip()
+            if exp_date in ["", "nan", "None", "NaT"]: exp_date = "-"
+            prod_name = str(row.get("제품명", "")).strip()
+            prod_type = str(row.get("유형", "")).strip()
+            prod_spec = str(row.get("규격", "")).strip()
+            if prod_type in ["", "nan"]: prod_type = "-"
+            if prod_spec in ["", "nan"]: prod_spec = "-"
+            
+            dkey = (prod_type, prod_name, prod_spec, prod_date, exp_date)
+            if dkey not in detail_inv: detail_inv[dkey] = {"생산량": 0}
+            try: detail_inv[dkey]["생산량"] += int(float(str(row.get("생산량", "0")).replace(",","")))
+            except: pass
+        
+        # 출고량은 제품별로만 차감 (생산일 기준 세분화 불가 → 제품별 총출고량을 FIFO 방식으로 배분)
+        prod_out_total = {}
+        for _, row in df_out.iterrows():
+            if str(row.get("제품명", "")).strip() in ["", "-", "None", "nan"]: continue
+            prod_name = str(row.get("제품명", "")).strip()
+            if prod_name not in prod_out_total: prod_out_total[prod_name] = 0
+            try: prod_out_total[prod_name] += int(float(str(row.get("수량", "0")).replace(",","")))
+            except: pass
+        
+        # 조정량도 제품별
+        prod_adj_total = {}
+        for _, row in df_adj.iterrows():
+            prod_name = str(row.get("제품명", "")).strip()
+            if prod_name not in prod_adj_total: prod_adj_total[prod_name] = 0
+            try: prod_adj_total[prod_name] += int(float(str(row.get("차이", "0")).replace(",","")))
+            except: pass
+        
+        detail_list = []
+        for dkey, dval in detail_inv.items():
+            detail_list.append({
+                "유형": dkey[0],
+                "제품명": dkey[1],
+                "규격": dkey[2],
+                "생산일": dkey[3],
+                "소비기한": dkey[4],
+                "생산량": dval["생산량"]
+            })
+        
+        df_detail = pd.DataFrame(detail_list)
+        if df_detail.empty:
+            st.info("재고를 산정할 데이터(생산량)가 존재하지 않습니다.")
+        else:
+            # 생산일 오름차순(오래된것 먼저) FIFO 정렬
+            df_detail = df_detail.sort_values(by=["제품명", "생산일"]).reset_index(drop=True)
+            
+            # FIFO 방식으로 출고량 차감
+            remaining_list = []
+            for pname in df_detail["제품명"].unique():
+                sub = df_detail[df_detail["제품명"] == pname].copy()
+                out_remain = prod_out_total.get(pname, 0)
+                adj_total = prod_adj_total.get(pname, 0)
+                
+                for idx, srow in sub.iterrows():
+                    prod_qty = srow["생산량"]
+                    if out_remain >= prod_qty:
+                        out_remain -= prod_qty
+                        remain = 0
+                    else:
+                        remain = prod_qty - out_remain
+                        out_remain = 0
+                    remaining_list.append({
+                        "유형": srow["유형"],
+                        "제품명": srow["제품명"],
+                        "규격": srow["규격"],
+                        "생산일": srow["생산일"],
+                        "소비기한": srow["소비기한"],
+                        "생산량": srow["생산량"],
+                        "현재고": remain
+                    })
+                # 조정분은 마지막 행(최신 생산일)에 반영
+                if remaining_list and adj_total != 0:
+                    last_idx = len(remaining_list) - 1
+                    for ri in range(len(remaining_list)-1, -1, -1):
+                        if remaining_list[ri]["제품명"] == pname:
+                            last_idx = ri
+                            break
+                    remaining_list[last_idx]["현재고"] += adj_total
+            
+            df_detail_final = pd.DataFrame(remaining_list)
+            # 현재고 0 초과만 표시 (옵션)
+            show_zero = st.checkbox("현재고 0인 항목도 표시", value=False)
+            if not show_zero:
+                df_detail_final = df_detail_final[df_detail_final["현재고"] > 0]
+            
+            df_detail_final = df_detail_final.sort_values(by=["유형", "제품명", "생산일"]).reset_index(drop=True)
+            
+            st.dataframe(
+                df_detail_final,
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "생산량": st.column_config.NumberColumn(format="%d"),
+                    "현재고": st.column_config.NumberColumn("현재고 (최종)", format="%d", help="FIFO 방식: 오래된 생산분부터 출고 차감"),
+                    "소비기한": st.column_config.TextColumn("소비기한"),
+                }
+            )
+        
+        st.divider()
+        st.markdown("#### 📋 제품별 총합 재고 현황")
         if df_inv.empty:
             st.info("재고를 산정할 데이터(생산 또는 출고량)가 존재하지 않습니다.")
         else:
@@ -4154,9 +4265,33 @@ elif menu_selection == "출고 관리":
                         st.session_state.outbound_row_count -= 1
                         st.rerun()
 
+            # 현재고(최종) 계산: 제품명 기준 단순 합산 (재고관리와 동일 결과)
+            df_data_for_inv = load_data()
+            df_adj_for_inv = load_inventory_adj()
+            cur_inv_by_prod = {}  # key: 제품명, value: 현재고
+            
+            for _, row in df_data_for_inv.iterrows():
+                pn = str(row.get("제품명", "")).strip()
+                if pn in ["", "-", "None", "nan"]: continue
+                if pn not in cur_inv_by_prod: cur_inv_by_prod[pn] = 0
+                try: cur_inv_by_prod[pn] += int(float(str(row.get("생산량", "0")).replace(",","")))
+                except: pass
+            for _, row in df_out.iterrows():
+                pn = str(row.get("제품명", "")).strip()
+                if pn in ["", "-", "None", "nan"]: continue
+                if pn not in cur_inv_by_prod: cur_inv_by_prod[pn] = 0
+                try: cur_inv_by_prod[pn] -= int(float(str(row.get("수량", "0")).replace(",","")))
+                except: pass
+            for _, row in df_adj_for_inv.iterrows():
+                pn = str(row.get("제품명", "")).strip()
+                if pn in ["", "-", "None", "nan"]: continue
+                if pn not in cur_inv_by_prod: cur_inv_by_prod[pn] = 0
+                try: cur_inv_by_prod[pn] += int(float(str(row.get("차이", "0")).replace(",","")))
+                except: pass
+
             out_items = []
             for i in range(st.session_state.outbound_row_count):
-                ic0, ic1, ic2, ic3, ic4 = st.columns([2, 3, 2, 2, 2])
+                ic0, ic1, ic2, ic3, ic4, ic5 = st.columns([1.5, 2.5, 1.5, 1.5, 2, 1.5])
                 with ic0:
                     type_opts = ["선택 안함"] + (df_p_list['유형'].dropna().unique().tolist() if not df_p_list.empty else [])
                     sel_t = st.selectbox(f"유형 ({i+1})", type_opts, key=f"ob_t_{i}")
@@ -4187,6 +4322,13 @@ elif menu_selection == "출고 관리":
                     qty = st.number_input(f"수량 ({i+1})", min_value=0, step=1, key=f"ob_q_{i}")
                 with ic4:
                     note = st.text_input(f"비고 ({i+1})", key=f"ob_n_{i}")
+                with ic5:
+                    cur_val = 0
+                    if sel_p != "선택 안함" and str(sel_p).strip() != "":
+                        cur_val = cur_inv_by_prod.get(str(sel_p).strip(), 0)
+                                    
+                                    
+                    st.text_input(f"현재고 ({i+1})", value=f"{cur_val} 개", disabled=True, key=f"ob_cur_{i}")
                 
                 if sel_p != "선택 안함" and str(sel_p).strip() != "" and qty > 0:
                     out_items.append({
